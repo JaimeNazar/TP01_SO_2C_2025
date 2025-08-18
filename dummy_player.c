@@ -26,7 +26,10 @@ int main() {
     
     while(1) {
         
-		  putchar('0' + rand() % 7);
+        sem_wait(&game_sync->can_move[0]);
 
+		putchar('0' + rand() % 7);
+
+        sem_post(&game_sync->m_can_access);
     }
 }

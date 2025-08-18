@@ -7,6 +7,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <unistd.h>
+#include <pty.h>
+#include <sys/ioctl.h>
+#include <stdlib.h>
 
 #include "common.h"
 
@@ -20,6 +24,10 @@ GameState *game_state = NULL;
 GameSync *game_sync = NULL;
 
 void view_init() {
+    
+    // If the terminal isnt defined, set it
+    if (!getenv("TERM"))
+        setenv("TERM", "xterm-256color", 1);
 
     // TODO: Error check
 
@@ -35,11 +43,11 @@ void view_init() {
     // Shared memory
 
     // NOTE: GameState is right after Player in shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory objetc
+    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
     game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
 
-    fd = shm_open(GAME_SYNC_MEM, O_RDONLY, 0666);   // Open shared memory objetc
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    fd = shm_open(GAME_SYNC_MEM, O_RDONLY, 0666); 
+    game_sync = mmap(0, sizeof(GameSync), PROT_READ, MAP_SHARED, fd, 0);
 
 }
 
@@ -57,11 +65,14 @@ void view_cleanup() {
 
 void view_render() {
 
+    // Signal that we are reading the gamestate
+	//sem_post(&game_sync->game_state_busy);
+
     // Render board
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            //mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
-            mvwaddch(window, i, j, (char)(i*j));
+            mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
+            ///mvwaddch(window, i, j, (char)(i*j));
         }
     }
 
@@ -71,15 +82,16 @@ void view_render() {
 int main(int argc, char **argv) {
 
     // TODO: Recibir ancho y alto por parametros
-    setenv("TERM", "xterm", 1);  // HOTFIX
 
     width = atoi(argv[1]);
     height = atoi(argv[2]);
 
     printf("View: width %d; height %d\n", width, height);
-    view_init();
     
+    view_init();
+
     while(1) {
+
         // Wait on semaphore  
         sem_wait(&game_sync->state_change);
 
