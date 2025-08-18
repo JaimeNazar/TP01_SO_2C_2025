@@ -1,12 +1,12 @@
 all: view dummy_player
 
 view: view.c
-	gcc -Wall -lncurses $< -o $@
+	gcc $< -lncurses -Wall -o $@
 
 dummy_player: dummy_player.c
-	gcc -Wall -lncurses $< -o $@
+	gcc $< -Wall -o $@
 
 clean:
-	rm -f view
+	rm -f view dummy_player
 
 .PHONY: all clean

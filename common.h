@@ -1,4 +1,5 @@
 #include <semaphore.h>  
+#include <stdbool.h>
 
 typedef struct { 
     char name[16]; // Nombre del jugador
