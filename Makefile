@@ -1,12 +1,16 @@
-all: view dummy_player
-
-view: view.c
-	gcc $< -lncurses -Wall -o $@
-
-dummy_player: dummy_player.c
-	gcc $< -Wall -o $@
+all: 
+	cd src; make all
 
 clean:
-	rm -f view dummy_player
+	cd src; make clean
+	
+format:
+	clang-format -style=file --sort-includes --Werror -i ./src/*.c ./src/include/*.h
 
-.PHONY: all clean
+check:
+	cppcheck --quiet --enable=all --force --inconclusive .
+	pvs-studio-analyzer trace -- make
+	pvs-studio-analyzer analyze
+	plog-converter -a '64:1,2,3;GA:1,2,3;OP:1,2,3' -t tasklist -o report.tasks PVS-Studio.log
+
+.PHONY: all clean format check

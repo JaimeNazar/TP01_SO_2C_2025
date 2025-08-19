@@ -23,7 +23,7 @@ int width, height;
 GameState *game_state = NULL;
 GameSync *game_sync = NULL;
 
-void view_init() {
+void view_init(void) {
     
     // If the terminal isnt defined, set it
     if (!getenv("TERM"))
@@ -49,7 +49,7 @@ void view_init() {
 
 }
 
-void view_cleanup() {
+void view_cleanup(void) {
     clrtoeol();
 	wrefresh(window);
 
@@ -61,7 +61,7 @@ void view_cleanup() {
 	endwin();   // Deallocate memory and end ncurses
 }
 
-void view_render() {
+void view_render(void) {
 
     // Signal that we are reading the gamestate
 	//sem_post(&game_sync->game_state_busy);
