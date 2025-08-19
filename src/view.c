@@ -32,13 +32,13 @@ void view_init(void) {
     // TODO: Error check
 
     // Ncurses
-    // initscr();
-    // clear();
-	// noecho();
-	// cbreak(); // Line buffering disabled. pass on everything
+    initscr();
+    clear();
+	noecho();
+	cbreak(); // Line buffering disabled. pass on everything
 
-    // window = newwin(height, width, 0, 0);
-    // wrefresh(window);
+    window = newwin(height, width, 0, 0);
+    wrefresh(window);
 
     // Shared memory
     int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
@@ -69,8 +69,8 @@ void view_render(void) {
     // Render board
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
-            ///mvwaddch(window, i, j, (char)(i*j));
+            //mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
+            mvwaddch(window, i, j, (char)(i*j));
         }
     }
 
@@ -88,13 +88,15 @@ int main(int argc, char **argv) {
     
     view_init();
 
+    view_render();  // Test
+
     while(!game_state->is_finished) {
         printf("View: waiting\n");
 
         // Wait on semaphore
         sem_wait(&(game_sync->state_change));
 
-        //view_render();
+        view_render();
 
         printf("View: posting\n");
     
