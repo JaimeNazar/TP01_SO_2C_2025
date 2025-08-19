@@ -27,13 +27,13 @@ int main(void) {
     printf("Player process\n");
 
     while(1) {
-        
         sem_wait(&game_sync->can_move[0]);
-        sem_post(&game_sync->game_state_busy);
 
         printf("Player can move\n");
 		putchar('0' + rand() % 7);
 
         sem_post(&game_sync->m_can_access);
     }
+
+    return 0;
 }

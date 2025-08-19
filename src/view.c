@@ -40,12 +40,13 @@ void view_init(void) {
     window = newwin(height, width, 0, 0);
     wrefresh(window);
 
+    // TODO: Check FLAGS
     // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
-    game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    int fd = shm_open(GAME_STATE_MEM, O_CREAT | O_RDWR, 0666);   // Open shared memory object
+    game_state = mmap(0, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // Memory map shared memory segment
 
-    fd = shm_open(GAME_SYNC_MEM, O_RDONLY, 0666); 
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ, MAP_SHARED, fd, 0);
+    fd = shm_open(GAME_SYNC_MEM, O_CREAT | O_RDWR, 0666); 
+    game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 }
 
@@ -63,14 +64,11 @@ void view_cleanup(void) {
 
 void view_render(void) {
 
-    // Signal that we are reading the gamestate
-	//sem_post(&game_sync->game_state_busy);
 
     // Render board
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            //mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
-            mvwaddch(window, i, j, (char)(i*j));
+            mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
         }
     }
 
@@ -88,18 +86,12 @@ int main(int argc, char **argv) {
     
     view_init();
 
-    view_render();  // Test
-
     while(!game_state->is_finished) {
-        printf("View: waiting\n");
-
         // Wait on semaphore
         sem_wait(&(game_sync->state_change));
 
         view_render();
 
-        printf("View: posting\n");
-    
 		// Signal master
 		sem_post(&(game_sync->render_done));
     }
