@@ -22,11 +22,11 @@ typedef struct {
 
 // Cambienlos dsp
 typedef struct {
-    sem_t state_change; // El máster le indica a la vista que hay cambios por imprimir
-    sem_t render_done; // La vista le indica al máster que terminó de imprimir
-    sem_t m_can_access; // Mutex para evitar inanición del máster al acceder al estado
-    sem_t game_state_busy; // Mutex para el estado del juego
-    sem_t next_var; // Mutex para la siguiente variable
+    sem_t state_change;     // El máster le indica a la vista que hay cambios por imprimir
+    sem_t render_done;      // La vista le indica al máster que terminó de imprimir
+    sem_t m_can_access;     // Mutex para evitar inanición del máster al acceder al estado
+    sem_t game_state_busy;  // Mutex para el estado del juego
+    sem_t next_var;         // Mutex para la siguiente variable
     unsigned int concurrent_players; // Cantidad de jugadores leyendo el estado
-    sem_t can_move[9]; // Le indican a cada jugador que puede enviar 1 movimiento
+    sem_t can_move[9];      // Le indican a cada jugador que puede enviar 1 movimiento
 } GameSync;

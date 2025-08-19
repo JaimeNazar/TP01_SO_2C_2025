@@ -32,17 +32,15 @@ void view_init() {
     // TODO: Error check
 
     // Ncurses
-    initscr();
-    clear();
-	noecho();
-	cbreak(); // Line buffering disabled. pass on everything
+    // initscr();
+    // clear();
+	// noecho();
+	// cbreak(); // Line buffering disabled. pass on everything
 
-    window = newwin(height, width, 0, 0);
-    wrefresh(window);
+    // window = newwin(height, width, 0, 0);
+    // wrefresh(window);
 
     // Shared memory
-
-    // NOTE: GameState is right after Player in shared memory
     int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
     game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
 
@@ -90,15 +88,18 @@ int main(int argc, char **argv) {
     
     view_init();
 
-    while(1) {
+    while(!game_state->is_finished) {
+        printf("View: waiting\n");
 
-        // Wait on semaphore  
-        sem_wait(&game_sync->state_change);
+        // Wait on semaphore
+        sem_wait(&(game_sync->state_change));
 
-        view_render();
+        //view_render();
 
+        printf("View: posting\n");
+    
 		// Signal master
-		sem_post(&game_sync->render_done);
+		sem_post(&(game_sync->render_done));
     }
 
     view_cleanup();
