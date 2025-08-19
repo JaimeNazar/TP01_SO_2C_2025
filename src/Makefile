@@ -1,5 +1,7 @@
 COMPILER = gcc
-COMPILER_FLAGS = -c -g --std=c99 -pedantic -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200809L -I./include
+COMPILER_FLAGS = -D_POSIX_C_SOURCE=200112L --std=c99 -pedantic -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -I./include
+
+OBJECTS := $(wildcard *.o)
 
 all: view dummy_player
 
@@ -13,4 +15,4 @@ clean:
 	@rm -rf $(OBJECTS)
 	@rm -rf ../view ../dummy_player
 
-.PHONY: all clean view dummy_player
+.PHONY: all clean
