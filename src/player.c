@@ -61,3 +61,40 @@ static void attach_shared_mem() {
     }
     close(fd_sync);
 }
+
+int main(void){
+
+    attach_shared_mem();
+    
+    find_me();
+
+    Player *me = &game_state->players[my_idx];
+    me->pid = getpid();
+    strncpy(me->name, "teofum", sizeof(me->name) - 1);//CAMBIAR X DIOS
+    me->score = 0;
+    me->invalid_reqs = 0;
+    me->valid_reqs = 0;
+    me->x = 0;
+    me->y = 0;
+    me->is_blocked = false;
+
+
+    srand(time(NULL));
+
+    printf("Player process\n");
+
+    while(1) {
+
+        sem_wait(&game_sync->can_move[0]);
+        sem_post(&game_sync->game_state_busy);
+
+        printf("Player can move\n");
+        putchar('0' + rand() % 7);
+
+        sem_post(&game_sync->m_can_access);
+    }
+
+    return 0;
+
+}
+
