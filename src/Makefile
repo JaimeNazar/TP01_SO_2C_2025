@@ -6,13 +6,13 @@ OBJECTS := $(wildcard *.o)
 all: view dummy_player
 
 view: view.c
-	$(COMPILER) $< -lncurses $(COMPILER_FLAGS) -o ../$@
+	$(COMPILER) $< -lncurses $(COMPILER_FLAGS) -o ../$@.out
 
 dummy_player: dummy_player.c
-	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@
+	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
 
 clean:
 	@rm -rf $(OBJECTS)
-	@rm -rf ../view ../dummy_player
+	@rm -rf ../view.out ../dummy_player.out
 
 .PHONY: all clean

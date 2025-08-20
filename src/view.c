@@ -14,16 +14,13 @@
 
 #include "common.h"
 
-#define GAME_STATE_MEM "/game_state"
-#define GAME_SYNC_MEM "/game_sync"
-
 WINDOW *window = NULL;
 int width, height;
 
 GameState *game_state = NULL;
 GameSync *game_sync = NULL;
 
-void view_init(void) {
+void view_init_ncurses(void) {
     
     // If the terminal isnt defined, set it
     if (!getenv("TERM"))
@@ -40,6 +37,11 @@ void view_init(void) {
     window = newwin(height, width, 0, 0);
     wrefresh(window);
 
+}
+
+// TODO: Agregar como libreria
+void view_init_shmem(void) {
+    
     // TODO: Check FLAGS
     // Shared memory
     int fd = shm_open(GAME_STATE_MEM, O_CREAT | O_RDWR, 0666);   // Open shared memory object
@@ -75,16 +77,52 @@ void view_render(void) {
 	wrefresh(window);
 }
 
+// static void print_sem(void) {
+//     int status = 0;
+
+//     sem_getvalue(&game_sync->state_change, &status);
+//     printf("State change: %d\n", status);
+
+//     sem_getvalue(&game_sync->render_done, &status);
+//     printf("Render done: %d\n", status);
+
+//     sem_getvalue(&game_sync->m_can_access, &status);
+//     printf("Master can access: %d\n", status);
+
+//     sem_getvalue(&game_sync->game_state_busy, &status);
+//     printf("Game state busy: %d\n", status);
+
+//     sem_getvalue(&game_sync->next_var, &status);
+//     printf("Next var: %d\n", status);
+
+//     printf("Can move: ");
+
+//     for (int i = 0; i < 9; i++) {
+//         sem_getvalue(&game_sync->can_move[i], &status);
+//         printf("%d ", status);
+//     }
+
+//     putchar('\n');
+// }
+
+// static void print_player(void) {
+//     Player *p = &game_state->player_list[0];
+
+//     printf("Is blocked: %d\n", p->is_blocked);
+//     printf("Valid requests: %d\n", p->valid_reqs);
+//     printf("Invalid requests: %d\n", p->invalid_reqs);
+
+// }
+
 int main(int argc, char **argv) {
 
-    // TODO: Recibir ancho y alto por parametros
+    // TODO: Check arguments
 
     width = atoi(argv[1]);
     height = atoi(argv[2]);
 
-    printf("View: width %d; height %d\n", width, height);
-    
-    view_init();
+    view_init_ncurses();
+    view_init_shmem();
 
     while(!game_state->is_finished) {
         // Wait on semaphore
