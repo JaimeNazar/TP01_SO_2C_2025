@@ -14,16 +14,13 @@
 
 #include "common.h"
 
-#define GAME_STATE_MEM "/game_state"
-#define GAME_SYNC_MEM "/game_sync"
-
 WINDOW *window = NULL;
 int width, height;
 
 GameState *game_state = NULL;
 GameSync *game_sync = NULL;
 
-void view_init(void) {
+void view_init_ncurses(void) {
     
     // If the terminal isnt defined, set it
     if (!getenv("TERM"))
@@ -40,12 +37,18 @@ void view_init(void) {
     window = newwin(height, width, 0, 0);
     wrefresh(window);
 
-    // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
-    game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+}
 
-    fd = shm_open(GAME_SYNC_MEM, O_RDONLY, 0666); 
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ, MAP_SHARED, fd, 0);
+// TODO: Agregar como libreria
+void view_init_shmem(void) {
+    
+    // TODO: Check FLAGS
+    // Shared memory
+    int fd = shm_open(GAME_STATE_MEM, O_CREAT | O_RDWR, 0666);   // Open shared memory object
+    game_state = mmap(0, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // Memory map shared memory segment
+
+    fd = shm_open(GAME_SYNC_MEM, O_CREAT | O_RDWR, 0666); 
+    game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 }
 
@@ -63,43 +66,70 @@ void view_cleanup(void) {
 
 void view_render(void) {
 
-    // Signal that we are reading the gamestate
-	//sem_post(&game_sync->game_state_busy);
 
     // Render board
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            //mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
-            mvwaddch(window, i, j, (char)(i*j));
+            mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
         }
     }
 
 	wrefresh(window);
 }
 
+// static void print_sem(void) {
+//     int status = 0;
+
+//     sem_getvalue(&game_sync->state_change, &status);
+//     printf("State change: %d\n", status);
+
+//     sem_getvalue(&game_sync->render_done, &status);
+//     printf("Render done: %d\n", status);
+
+//     sem_getvalue(&game_sync->m_can_access, &status);
+//     printf("Master can access: %d\n", status);
+
+//     sem_getvalue(&game_sync->game_state_busy, &status);
+//     printf("Game state busy: %d\n", status);
+
+//     sem_getvalue(&game_sync->next_var, &status);
+//     printf("Next var: %d\n", status);
+
+//     printf("Can move: ");
+
+//     for (int i = 0; i < 9; i++) {
+//         sem_getvalue(&game_sync->can_move[i], &status);
+//         printf("%d ", status);
+//     }
+
+//     putchar('\n');
+// }
+
+// static void print_player(void) {
+//     Player *p = &game_state->player_list[0];
+
+//     printf("Is blocked: %d\n", p->is_blocked);
+//     printf("Valid requests: %d\n", p->valid_reqs);
+//     printf("Invalid requests: %d\n", p->invalid_reqs);
+
+// }
+
 int main(int argc, char **argv) {
 
-    // TODO: Recibir ancho y alto por parametros
+    // TODO: Check arguments
 
     width = atoi(argv[1]);
     height = atoi(argv[2]);
 
-    printf("View: width %d; height %d\n", width, height);
-    
-    view_init();
-
-    view_render();  // Test
+    view_init_ncurses();
+    view_init_shmem();
 
     while(!game_state->is_finished) {
-        printf("View: waiting\n");
-
         // Wait on semaphore
         sem_wait(&(game_sync->state_change));
 
         view_render();
 
-        printf("View: posting\n");
-    
 		// Signal master
 		sem_post(&(game_sync->render_done));
     }
