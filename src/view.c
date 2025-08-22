@@ -44,10 +44,18 @@ void view_init_shmem(void) {
     
     // TODO: Check FLAGS
     // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_CREAT | O_RDWR, 0666);   // Open shared memory object
-    game_state = mmap(0, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
 
-    fd = shm_open(GAME_SYNC_MEM, O_CREAT | O_RDWR, 0666); 
+    game_state = mmap(0, sizeof(GameState) + width*height*sizeof(int), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+
+    fd = shm_open(GAME_SYNC_MEM, O_RDWR, 0666); 
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
+
     game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 }
@@ -65,8 +73,6 @@ void view_cleanup(void) {
 }
 
 void view_render(void) {
-
-
     // Render board
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
@@ -74,6 +80,8 @@ void view_render(void) {
         }
     }
 
+	waddstr(window, "This was printed using addstr\n\n");
+    
 	wrefresh(window);
 }
 
@@ -121,14 +129,14 @@ int main(int argc, char **argv) {
     width = atoi(argv[1]);
     height = atoi(argv[2]);
 
-    view_init_ncurses();
+    //view_init_ncurses();
     view_init_shmem();
 
-    while(!game_state->is_finished) {
+    while(!game_state->finished) {
         // Wait on semaphore
         sem_wait(&(game_sync->state_change));
 
-        view_render();
+        //view_render();
 
 		// Signal master
 		sem_post(&(game_sync->render_done));
