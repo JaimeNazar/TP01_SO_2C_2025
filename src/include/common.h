@@ -1,8 +1,8 @@
 #include <semaphore.h>  
 #include <stdbool.h>
 
-#define GAME_STATE_MEM "/game_state"
-#define GAME_SYNC_MEM "/game_sync"
+#define GAME_STATE_SHM "/game_state"
+#define GAME_SYNC_SHM "/game_sync"
 
 typedef struct { 
     char name[16]; // Nombre del jugador

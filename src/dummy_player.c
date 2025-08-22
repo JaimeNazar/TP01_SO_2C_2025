@@ -14,16 +14,15 @@ int main(void) {
     GameState *game_state = NULL;
     GameSync *game_sync = NULL;
 
-    // TODO: Check FLAGS
     // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
+    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
     if (fd == -1) {
         perror("Error SHM\n");
     }
 
     game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
 
-    fd = shm_open(GAME_SYNC_MEM, O_RDWR, 0666); 
+    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
     if (fd == -1) {
         perror("Error SHM\n");
     }
@@ -82,7 +81,7 @@ int main(void) {
         }
         
         // Elegir y enviar movimiento
-        unsigned char move = 2;
+        unsigned char move = rand() % 7;
         if (write(STDOUT_FILENO, &move, 1) != 1) {
             perror("write move");
             break;
