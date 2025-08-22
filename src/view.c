@@ -14,17 +14,29 @@
 
 #include "common.h"
 
-WINDOW *window = NULL;
-int width, height;
+// Color, experimental
+#define GRASS_PAIR     1
+#define EMPTY_PAIR     1
+#define WATER_PAIR     2
+#define MOUNTAIN_PAIR  3
+#define PLAYER_PAIR    4
 
-GameState *game_state = NULL;
-GameSync *game_sync = NULL;
+typedef struct {
+    WINDOW *window;
+    int width, height;
 
-void view_init_ncurses(void) {
+    GameState *game_state;
+    GameSync *game_sync;
+} viewCDT;
+
+typedef viewCDT* viewADT;
+
+void view_init_ncurses(viewADT v) {
     
     // If the terminal isnt defined, set it
     if (!getenv("TERM"))
         setenv("TERM", "xterm-256color", 1);
+
 
     // TODO: Error check
 
@@ -34,107 +46,109 @@ void view_init_ncurses(void) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    window = newwin(height, width, 0, 0);
-    wrefresh(window);
+    v->window = newwin(v->height, v->width, 0, 0);
+    wrefresh(v->window);
 
+    // Check color support
+    if (!has_colors() ) {
+        endwin();
+        printf("Your terminal does not support color\n");
+        exit(1);
+    }
+
+    // Color setup
+    start_color();
+    init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_GREEN);
+    init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
+    init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
+    init_pair(PLAYER_PAIR, COLOR_RED, COLOR_MAGENTA);
 }
 
 // TODO: Agregar como libreria
-void view_init_shmem(void) {
+void view_init_shm(viewADT v) {
     
     // TODO: Check FLAGS
-    // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_CREAT | O_RDWR, 0666);   // Open shared memory object
-    game_state = mmap(0, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    // Shared shmory
+    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
 
-    fd = shm_open(GAME_SYNC_MEM, O_CREAT | O_RDWR, 0666); 
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    v->game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+
+    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
+
+    v->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 }
 
-void view_cleanup(void) {
+void view_cleanup(viewADT v) {
     clrtoeol();
-	wrefresh(window);
+	wrefresh(v->window);
 
-    if (window) {
-        delwin(window);
-        window = NULL;
+    if (v->window) {
+        delwin(v->window);
+        v->window = NULL;
     }
 
 	endwin();   // Deallocate memory and end ncurses
 }
 
-void view_render(void) {
-
-
+void view_render(viewADT v) {
     // Render board
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            mvwaddch(window, i, j, (char)(game_state->board[i * width + j])); 
+    for (int i = 0; i < v->height; i++) {
+        for (int j = 0; j < v->width; j++) {
+            int value = v->game_state->board[i * v->width + j];
+
+            if (value == 0) {
+                wattron(v->window,COLOR_PAIR(PLAYER_PAIR));
+                mvwaddch(v->window, i, j, (char)' '); 
+                wattroff(v->window,COLOR_PAIR(PLAYER_PAIR));   
+            } else {
+                wattron(v->window,COLOR_PAIR(GRASS_PAIR));
+                mvwaddch(v->window, i, j, (char)' '); 
+                wattroff(v->window,COLOR_PAIR(GRASS_PAIR));   
+            }
+
         }
     }
 
-	wrefresh(window);
+	wrefresh(v->window);
 }
-
-// static void print_sem(void) {
-//     int status = 0;
-
-//     sem_getvalue(&game_sync->state_change, &status);
-//     printf("State change: %d\n", status);
-
-//     sem_getvalue(&game_sync->render_done, &status);
-//     printf("Render done: %d\n", status);
-
-//     sem_getvalue(&game_sync->m_can_access, &status);
-//     printf("Master can access: %d\n", status);
-
-//     sem_getvalue(&game_sync->game_state_busy, &status);
-//     printf("Game state busy: %d\n", status);
-
-//     sem_getvalue(&game_sync->next_var, &status);
-//     printf("Next var: %d\n", status);
-
-//     printf("Can move: ");
-
-//     for (int i = 0; i < 9; i++) {
-//         sem_getvalue(&game_sync->can_move[i], &status);
-//         printf("%d ", status);
-//     }
-
-//     putchar('\n');
-// }
-
-// static void print_player(void) {
-//     Player *p = &game_state->player_list[0];
-
-//     printf("Is blocked: %d\n", p->is_blocked);
-//     printf("Valid requests: %d\n", p->valid_reqs);
-//     printf("Invalid requests: %d\n", p->invalid_reqs);
-
-// }
 
 int main(int argc, char **argv) {
 
-    // TODO: Check arguments
+    if (argc < 3) {
+        printf("Usage: ./view.out [width] [height]");
 
-    width = atoi(argv[1]);
-    height = atoi(argv[2]);
-
-    view_init_ncurses();
-    view_init_shmem();
-
-    while(!game_state->is_finished) {
-        // Wait on semaphore
-        sem_wait(&(game_sync->state_change));
-
-        view_render();
-
-		// Signal master
-		sem_post(&(game_sync->render_done));
+        return -1;
     }
 
-    view_cleanup();
+    // Init view context
+    viewCDT v = { 0 };
+
+    v.width = atoi(argv[1]);
+    v.height = atoi(argv[2]);
+
+    view_init_ncurses(&v);
+    view_init_shm(&v);
+
+    // Main loop
+
+    while(!v.game_state->finished) {
+        // Wait on semaphore
+        sem_wait(&(v.game_sync->state_change));
+
+        view_render(&v);
+
+		// Signal master
+		sem_post(&(v.game_sync->render_done));
+    }
+
+    view_cleanup(&v);
     
 	return 0;
 }
