@@ -98,25 +98,32 @@ void view_cleanup(viewADT v) {
 }
 
 void view_render(viewADT v) {
-    // Render board
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
-            int value = v->game_state->board[i * v->width + j];
-
-            if (value == 0) {
-                wattron(v->window,COLOR_PAIR(PLAYER_PAIR));
-                mvwaddch(v->window, i, j, (char)' '); 
-                wattroff(v->window,COLOR_PAIR(PLAYER_PAIR));   
-            } else {
-                wattron(v->window,COLOR_PAIR(GRASS_PAIR));
-                mvwaddch(v->window, i, j, (char)' '); 
-                wattroff(v->window,COLOR_PAIR(GRASS_PAIR));   
+            int is_player = 0;
+            char player_char = '@';
+            for (unsigned int p = 0; p < v->game_state->player_count; p++) {
+                if (v->game_state->players[p].x == j && v->game_state->players[p].y == i) {
+                    is_player = 1;
+                    player_char = 'A' + p; // Letra para cada jugador
+                    break;
+                }
             }
-
+            int value = v->game_state->board[i * v->width + j];
+            if (is_player) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR));
+                mvwaddch(v->window, i, j, player_char);
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR));
+            } else if (value == 0) { // Camino recorrido
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR));
+                mvwaddch(v->window, i, j, '.'); // o el número si prefieres
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR));
+            } else {
+                mvwaddch(v->window, i, j, '0' + (value % 10));
+            }
         }
     }
-
-	wrefresh(v->window);
+    wrefresh(v->window);
 }
 
 int main(int argc, char **argv) {

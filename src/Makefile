@@ -3,7 +3,7 @@ COMPILER_FLAGS = -D_POSIX_C_SOURCE=200112L --std=c99 -pedantic -pedantic-errors 
 
 OBJECTS := $(wildcard *.o)
 
-all: view dummy_player
+all: view dummy_player greedy_player
 
 view: view.c
 	$(COMPILER) $< -lncurses $(COMPILER_FLAGS) -o ../$@.out
@@ -11,8 +11,11 @@ view: view.c
 dummy_player: dummy_player.c
 	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
 
+greedy_player: greedy_player.c
+	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
+
 clean:
 	@rm -rf $(OBJECTS)
-	@rm -rf ../view.out ../dummy_player.out
+	@rm -rf ../view.out ../dummy_player.out ../greedy_player.out
 
 .PHONY: all clean
