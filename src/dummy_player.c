@@ -16,11 +16,20 @@ int main(void) {
 
     // TODO: Check FLAGS
     // Shared memory
-    int fd = shm_open(GAME_STATE_MEM, O_RDWR, 0666);   // Open shared memory object
-    game_state = mmap(0, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    int fd = shm_open(GAME_STATE_MEM, O_RDONLY, 0666);   // Open shared memory object
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
+
+    game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
 
     fd = shm_open(GAME_SYNC_MEM, O_RDWR, 0666); 
+    if (fd == -1) {
+        perror("Error SHM\n");
+    }
+
     game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
 
     //strcpy(player->name, "pepe");
 
