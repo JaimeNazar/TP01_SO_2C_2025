@@ -54,18 +54,6 @@ void direction_to_offset(unsigned char dir, int *dx, int *dy) {
             *dx = 0; *dy = 0;   break;
     }
 }
-bool has_valid_moves(GameState *state, int x, int y) {
-    for (unsigned char dir = 0; dir < 8; dir++) {
-        int dx = 0, dy = 0;
-        direction_to_offset(dir, &dx, &dy);
-        int nx = x + dx;
-        int ny = y + dy;
-        if (is_cell_free(state, nx, ny)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 // Cuenta la cantidad de celdas libres alrededor de (x, y)
 int count_free_neighbors(GameState *state, int x, int y) {
@@ -99,9 +87,9 @@ unsigned char choose_move(Player *me, GameState *state) {
             int reward = get_board_cell(state, new_x, new_y);
             int free_neighbors = count_free_neighbors(state, new_x, new_y);
 
-            int dead_end_penalty = has_valid_moves(state, new_x, new_y) ? 0 : DEAD_END_WEIGHT;
+            int dead_end_penalty = free_neighbors == 0 ? DEAD_END_WEIGHT : 0;
 
-            // Score teniendo en cuenta mayor puntaje y celdas libres cercanas
+            // Score teniendo en cuenta mayor puntaje, celdas libres cercanas y que no sea dead ends
             int score = reward * REWARD_WEIGHT + free_neighbors * FREE_NEIGHBORS_WEIGHT + dead_end_penalty;
 
             if (!found_move || score > best_score) {
