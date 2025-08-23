@@ -62,12 +62,12 @@ void view_init_ncurses(viewADT v) {
     init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
     init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
     // Colores para jugadores (hasta 6 jugadores, puedes agregar más si necesitas)
-    init_pair(PLAYER_PAIR_BASE + 0, COLOR_RED, COLOR_BLACK);
-    init_pair(PLAYER_PAIR_BASE + 1, COLOR_GREEN, COLOR_BLACK);
-    init_pair(PLAYER_PAIR_BASE + 2, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(PLAYER_PAIR_BASE + 3, COLOR_BLUE, COLOR_BLACK);
-    init_pair(PLAYER_PAIR_BASE + 4, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(PLAYER_PAIR_BASE + 5, COLOR_CYAN, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 0, COLOR_WHITE, COLOR_RED);
+    init_pair(PLAYER_PAIR_BASE + 1, COLOR_WHITE, COLOR_GREEN);
+    init_pair(PLAYER_PAIR_BASE + 2, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(PLAYER_PAIR_BASE + 3, COLOR_WHITE, COLOR_BLUE);
+    init_pair(PLAYER_PAIR_BASE + 4, COLOR_WHITE, COLOR_MAGENTA);
+    init_pair(PLAYER_PAIR_BASE + 5, COLOR_WHITE, COLOR_CYAN);
 }
 
 // TODO: Agregar como libreria
@@ -118,9 +118,14 @@ void view_render(viewADT v) {
             int value = v->game_state->board[i * v->width + j];
             int is_trail = 0;
             unsigned int trail_player = 0;
-            if (!is_player && value < 0) {
-                is_trail = 1;
-                trail_player = (unsigned int)(-value);
+            if (!is_player) {
+                if (value < 0){
+                    is_trail = 1;
+                    trail_player = (unsigned int) ((-value)); // Ajuste para que A=0, B=1, etc.
+                } else if (value == 0) {
+                    is_trail = 1;
+                    trail_player = 0;
+                }
             }
             if (is_player) {
                 wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
