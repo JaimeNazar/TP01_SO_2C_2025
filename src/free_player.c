@@ -11,7 +11,7 @@
 
 #define REWARD_WEIGHT 10
 #define FREE_NEIGHBORS_WEIGHT 2
-#define DEAD_END_WEIGHT -5
+#define DEAD_END_WEIGHT -30
 
 
 bool is_valid_position(GameState *state, int x, int y) {
@@ -87,10 +87,10 @@ unsigned char choose_move(Player *me, GameState *state) {
             int reward = get_board_cell(state, new_x, new_y);
             int free_neighbors = count_free_neighbors(state, new_x, new_y);
 
-            int dead_end_penalty = free_neighbors == 0 ? DEAD_END_WEIGHT : 0;
+            int dead_end_penalty = (free_neighbors == 0 ? 1 : 0) ;
 
             // Score teniendo en cuenta mayor puntaje, celdas libres cercanas y que no sea dead ends
-            int score = reward * REWARD_WEIGHT + free_neighbors * FREE_NEIGHBORS_WEIGHT + dead_end_penalty;
+            int score = reward * REWARD_WEIGHT + free_neighbors * FREE_NEIGHBORS_WEIGHT + dead_end_penalty * DEAD_END_WEIGHT;
 
             if (!found_move || score > best_score) {
 
