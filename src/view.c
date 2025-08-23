@@ -19,7 +19,7 @@
 #define EMPTY_PAIR     1
 #define WATER_PAIR     2
 #define MOUNTAIN_PAIR  3
-#define PLAYER_PAIR    4
+#define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
 
 typedef struct {
     WINDOW *window;
@@ -61,7 +61,13 @@ void view_init_ncurses(viewADT v) {
     init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_GREEN);
     init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
     init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
-    init_pair(PLAYER_PAIR, COLOR_RED, COLOR_MAGENTA);
+    // Colores para jugadores (hasta 6 jugadores, puedes agregar más si necesitas)
+    init_pair(PLAYER_PAIR_BASE + 0, COLOR_RED, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 1, COLOR_GREEN, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 2, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 3, COLOR_BLUE, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 4, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(PLAYER_PAIR_BASE + 5, COLOR_CYAN, COLOR_BLACK);
 }
 
 // TODO: Agregar como libreria
@@ -101,23 +107,29 @@ void view_render(viewADT v) {
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
             int is_player = 0;
-            char player_char = '@';
+            unsigned int player_idx = 0;
             for (unsigned int p = 0; p < v->game_state->player_count; p++) {
                 if (v->game_state->players[p].x == j && v->game_state->players[p].y == i) {
                     is_player = 1;
-                    player_char = 'A' + p; // Letra para cada jugador
+                    player_idx = p;
                     break;
                 }
             }
             int value = v->game_state->board[i * v->width + j];
+            int is_trail = 0;
+            unsigned int trail_player = 0;
+            if (!is_player && value < 0) {
+                is_trail = 1;
+                trail_player = (unsigned int)(-value);
+            }
             if (is_player) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR));
-                mvwaddch(v->window, i, j, player_char);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR));
-            } else if (value == 0) { // Camino recorrido
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR));
-                mvwaddch(v->window, i, j, '.'); // o el número si prefieres
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR));
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
+                mvwaddch(v->window, i, j, 'A' + player_idx);
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
+            } else if (is_trail) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
+                mvwaddch(v->window, i, j, 'A' + trail_player);
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
             } else {
                 mvwaddch(v->window, i, j, '0' + (value % 10));
             }
