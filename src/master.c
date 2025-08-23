@@ -1,5 +1,6 @@
-#include<stdio.h>
-#include<string.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 // TODO: Put in common.h shared dependencies
 
@@ -107,14 +108,21 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 
 int main (int argc, char *argv[]) {
 
-	MasterCDT m = { 0 };
+	MasterCDT m = { DEFAULT_WIDTH,
+					DEFAULT_HEIGHT,
+					DEFAULT_DELAY,
+					time(NULL),
+					0,
+					0,
+					0 };
 
 	if (parse_args(&m, argc, argv)) {
 		printf("Usage: ./ChompChamps [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
 
 		return -1;
 	}
-	
+
+
 
 	return 0;
 }
