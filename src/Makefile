@@ -8,17 +8,18 @@ all: view dummy_player greedy_player free_player v2
 view: view.c
 	$(COMPILER) $< -lncurses $(COMPILER_FLAGS) -o ../$@.out
 
-dummy_player: dummy_player.c
-	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
-
 greedy_player: greedy_player.c
-	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
+dummy_player: dummy_player.c player_common.c
+	$(COMPILER) $^ $(COMPILER_FLAGS) -o ../$@.out
 
-free_player: free_player.c
-	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
+greedy_player: greedy_player.c player_common.c
+	$(COMPILER) $^ $(COMPILER_FLAGS) -o ../$@.out
 
-v2: v2.c
-	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
+free_player: free_player.c player_common.c
+	$(COMPILER) $^ $(COMPILER_FLAGS) -o ../$@.out
+
+v2: v2.c player_common.c
+	$(COMPILER) $^ $(COMPILER_FLAGS) -o ../$@.out
 
 clean:
 	@rm -rf $(OBJECTS)

@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -6,69 +7,14 @@
 #include <time.h>
 #include <stdio.h>
 #include <unistd.h>
-
 #include "common.h"
+#include "player_common.h"
 
 #define REWARD_WEIGHT 10
 #define FREE_NEIGHBORS_WEIGHT 2
 #define DEAD_END_WEIGHT -30
 
 
-bool is_valid_position(GameState *state, int x, int y) {
-    return x >= 0 && x < state->width && y >= 0 && y < state->height;
-}
-
-
-
-int get_board_cell(GameState *state, int x, int y) {
-    if (!is_valid_position(state, x, y)) {
-        return -1; // Valor inválido para posiciones fuera del tablero
-    }
-    return state->board[y * state->width + x];
-}
-
-bool is_cell_free(GameState *state, int x, int y) {
-    int cell_value = get_board_cell(state, x, y);
-    return cell_value >= 1 && cell_value <= 9;
-}
-
-void direction_to_offset(unsigned char dir, int *dx, int *dy) {
-    switch (dir) {
-        case 0: // arriba
-            *dx = 0;  *dy = -1; break;
-        case 1: // arriba-derecha
-            *dx = 1;  *dy = -1; break;
-        case 2: // derecha
-            *dx = 1;  *dy = 0;  break;
-        case 3: // abajo-derecha
-            *dx = 1;  *dy = 1;  break;
-        case 4: // abajo
-            *dx = 0;  *dy = 1;  break;
-        case 5: // abajo-izquierda
-            *dx = -1; *dy = 1;  break;
-        case 6: // izquierda
-            *dx = -1; *dy = 0;  break;
-        case 7: // arriba-izquierda
-            *dx = -1; *dy = -1; break;
-        default: // dirección inválida
-            *dx = 0; *dy = 0;   break;
-    }
-}
-
-// Cuenta la cantidad de celdas libres alrededor de (x, y)
-int count_free_neighbors(GameState *state, int x, int y) {
-    int count = 0;
-    for (unsigned char dir = 0; dir < 8; dir++) {
-        int dx = 0, dy = 0;
-        direction_to_offset(dir, &dx, &dy);
-        int nx = x + dx;
-        int ny = y + dy;
-        if (is_cell_free(state, nx, ny)) {
-            count++;
-        }
-    }
-    return count;
-}
 
 unsigned char choose_move(Player *me, GameState *state) {
     unsigned char best_direction = 0;
