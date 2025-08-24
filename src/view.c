@@ -61,13 +61,16 @@ void view_init_ncurses(viewADT v) {
     init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_GREEN);
     init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
     init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
-    // Colores para jugadores (hasta 6 jugadores, puedes agregar más si necesitas)
-    init_pair(PLAYER_PAIR_BASE + 0, COLOR_WHITE, COLOR_RED);
-    init_pair(PLAYER_PAIR_BASE + 1, COLOR_WHITE, COLOR_GREEN);
-    init_pair(PLAYER_PAIR_BASE + 2, COLOR_WHITE, COLOR_YELLOW);
-    init_pair(PLAYER_PAIR_BASE + 3, COLOR_WHITE, COLOR_BLUE);
-    init_pair(PLAYER_PAIR_BASE + 4, COLOR_WHITE, COLOR_MAGENTA);
-    init_pair(PLAYER_PAIR_BASE + 5, COLOR_WHITE, COLOR_CYAN);
+    // Colores para jugadores
+    init_pair(PLAYER_PAIR_BASE + 0, COLOR_WHITE, COLOR_RED);      // Jugador 1
+    init_pair(PLAYER_PAIR_BASE + 1, COLOR_WHITE, COLOR_GREEN);    // Jugador 2
+    init_pair(PLAYER_PAIR_BASE + 2, COLOR_WHITE, COLOR_YELLOW);   // Jugador 3
+    init_pair(PLAYER_PAIR_BASE + 3, COLOR_WHITE, COLOR_BLUE);     // Jugador 4
+    init_pair(PLAYER_PAIR_BASE + 4, COLOR_WHITE, COLOR_MAGENTA);  // Jugador 5
+    init_pair(PLAYER_PAIR_BASE + 5, COLOR_WHITE, COLOR_CYAN);     // Jugador 6
+    init_pair(PLAYER_PAIR_BASE + 6, COLOR_BLACK, COLOR_WHITE);    // Jugador 7
+    init_pair(PLAYER_PAIR_BASE + 7, COLOR_BLACK, COLOR_YELLOW);   // Jugador 8
+    init_pair(PLAYER_PAIR_BASE + 8, COLOR_BLACK, COLOR_GREEN);    // Jugador 9
 }
 
 // TODO: Agregar como libreria
