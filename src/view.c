@@ -20,6 +20,8 @@
 #define WATER_PAIR     2
 #define MOUNTAIN_PAIR  3
 #define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
+#define TABLE_WIDTH 55
+
 
 typedef struct {
     WINDOW *window;
@@ -46,7 +48,7 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin(v->height, v->width, 0, 0);
+    v->window = newwin(v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
     wrefresh(v->window);
 
     // Check color support
@@ -130,19 +132,40 @@ void view_render(viewADT v) {
                     trail_player = 0;
                 }
             }
+
+            //Muestra tablero de datos
+            
+            // Título de la tabla
+            const char *title = "Chomp Champs - Tabla de Jugadores";
+            int title_length = strlen(title);
+            int title_start_col = v->width + (TABLE_WIDTH - title_length) / 2;
+            mvwprintw(v->window, 1, title_start_col, "%s", title);
+            mvwhline(v->window, 2, v->width + 1, '-', TABLE_WIDTH - 2);
+
+            // Encabezados de la tabla
+            mvwprintw(v->window, 3, v->width + 1, "%-10s | %-10s | %-10s | %-10s", "Jugador", "Puntaje", "Movimientos", "Inválidos");
+            mvwhline(v->window, 4, v->width + 1, '-', TABLE_WIDTH - 2);
+
+            // Datos de los jugadores
+            for (size_t i = 0; i < v->game_state->player_count; i++) {
+            mvwprintw(v->window, 5 + (int)i, v->width + 1, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);            }
+            wrefresh(v->window);
+
+
             if (is_player) {
                 wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
-                mvwaddch(v->window, i, j, 'A' + player_idx);
+                mvwaddch(v->window, i + 1, j + 1, 'A' + player_idx);
                 wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
             } else if (is_trail) {
                 wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
-                mvwaddch(v->window, i, j, 'A' + trail_player);
+                mvwaddch(v->window, i + 1, j + 1, 'A' + trail_player);
                 wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
             } else {
-                mvwaddch(v->window, i, j, '0' + (value % 10));
+                mvwaddch(v->window, i + 1, j + 1, '0' + (value % 10));
             }
         }
     }
+    wborder(v->window, '|', '|', '-', '-', '+', '+', '+', '+');
     wrefresh(v->window);
 }
 
