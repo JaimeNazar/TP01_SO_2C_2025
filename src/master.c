@@ -31,9 +31,12 @@ typedef struct {
 	int player_count;
 	GameState *game_state;
 	GameSync *game_sync;
+	int game_state_fd, game_sync_fd;
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
+
+// TODO: Hacer que retornen algo diferente de 0 en caso de error
 
 /* Funcion auxiliar, copia contenidos de un string a otro. 
  * Realizando verificaciones correspondientes. 
@@ -54,8 +57,6 @@ static int str_copy(char *s1, char *s2) {
 static int parse_args(MasterADT m, int argc, char *argv[]) {
 
 	int i = 1;	// Saltearse nombre del programa
-
-	char player_flag = 0; // El unico que puede recibir mas de un parametro es -p
 
 	while (i < argc) {
 
@@ -117,12 +118,15 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 	return 0;
 }
 
-static int init_sem(MasterADT m) {
-
-	return 0;
-}
-
 static int init_state(MasterADT m) {
+	
+	//m->game_state->board = malloc(sizeof(int) * m->width * m->height);
+	//if (m->game_state->board == NULL) {
+	//	printf("MASTER::INIT_STATE: Failed to reserve memory\n");
+	//	return -1;
+	//}
+
+	// Llenar el tablero
 
 	return 0;
 }
@@ -130,19 +134,16 @@ static int init_state(MasterADT m) {
 static int init_sync(MasterADT m) {
 	
 
-	// Create semaphores
+	// Crear semaforos
 	sem_init(&m->game_sync->state_change, 1, 0);
-	//m->game_sync->render_done = *sem_open("/sem_render_done", O_CREAT, 0644, 0);	
-	//m->game_sync->master_mutex = *sem_open("/sem_master_mutex", O_CREAT, 0644, 0);	
-	//m->game_sync->state_mutex = *sem_open("/sem_state_mutex", O_CREAT, 0644, 0);	
-	//m->game_sync->reader_count_mutex = *sem_open("/sem_reader_count_mutex", O_CREAT, 0644, 0);
-	// Create the player movement sem with a unique name for each
-	//char player_sem[21] = { 0 };
-	//for (int i = 0; i < m->player_count; i++) {
-		// TODO: Se puede cambiar el string que le pase a sem_open?	
-	//	sprintf(player_sem, "/sem_player_can_move", i);
-	//	m->game_sync->player_can_move[i] = *sem_open(player_sem, O_CREAT, 0644, 0);	
-	//}
+	sem_init(&m->game_sync->render_done, 1, 0);
+	sem_init(&m->game_sync->master_mutex, 1, 0);
+	sem_init(&m->game_sync->state_mutex, 1, 0);
+	sem_init(&m->game_sync->reader_count_mutex, 1, 0);	
+
+	for (int i = 0; i < m->player_count; i++) {
+		sem_init(&m->game_sync->player_can_move[i], 1, 0);
+	}
 
 	return 0;
 }
@@ -151,14 +152,38 @@ static int init_shm(MasterADT m) {
 
 	// TODO: Error check, investigar flags, son las de ChompChamps sacadas con strace
 	// Game state
-	int fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0644);  
-	ftruncate(fd, sizeof(GameState));  
-	m->game_state = mmap(0, sizeof(GameState), PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0644);  
+	ftruncate(m->game_state_fd, sizeof(GameState));  
+	m->game_state = mmap(0, sizeof(GameState), PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
 
 	// Game sync
-	fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0666);  
-	ftruncate(fd, sizeof(GameSync));  
-	m->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_READ, MAP_SHARED, fd, 0);
+	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0666);  
+	ftruncate(m->game_sync_fd, sizeof(GameSync));  
+	m->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
+
+	return 0;
+}
+
+static int close_shm(MasterADT m) {
+	munmap(m->game_state, sizeof(GameState)); // Unmap del proceso
+	close(m->game_state_fd); // Cerrar el fd
+	shm_unlink(GAME_STATE_SHM); // Remover el objeto de memoria compartida, solo cuando nadie mas lo utilice
+	
+	// Hacer lo mismo para GameSync
+	munmap(m->game_sync, sizeof(GameSync));
+	close(m->game_sync_fd);
+	shm_unlink(GAME_SYNC_SHM);
+
+	return 0;
+}
+
+static int cleanup(MasterADT m) {
+
+	// Liberar memoria compartida
+	close_shm(m);
+
+	// Liberar memoria tablero
+	//free(m->game_state->board);
 
 	return 0;
 }
@@ -169,6 +194,10 @@ int main (int argc, char *argv[]) {
 					DEFAULT_HEIGHT,
 					DEFAULT_DELAY,
 					time(NULL),
+					{ 0 },
+					{ {0} },
+					0,
+					0,
 					0,
 					0,
 					0 };
@@ -179,10 +208,13 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 
-	// Initialization
-	init_shm(&m);
+	// Setup inicial
+	init_shm(&m); // Se debe llamar primero
 	init_state(&m);
 	init_sync(&m);
+
+	// Una vez termino todo, liberar recursos
+    cleanup(&m);
 
 	return 0;
 }
