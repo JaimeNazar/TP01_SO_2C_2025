@@ -26,4 +26,6 @@ bool has_nearby_players(GameState *state, int x, int y, int my_id);
 
 bool is_potential_trap(GameState *state, int x, int y);
 
+bool is_endgame(GameState *state);
+
 #endif // PLAYER_COMMON_H

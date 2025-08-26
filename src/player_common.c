@@ -109,3 +109,19 @@ bool is_potential_trap(GameState *state, int x, int y) {
 
     return free_neighbors == 0;
 }
+
+
+
+
+bool is_endgame(GameState *state) {
+    int total_cells = state->width * state->height;
+    int free_cells = 0;
+    
+    for (int i = 0; i < total_cells; i++) {
+        if (state->board[i] >= 1 && state->board[i] <= 9) {
+            free_cells++;
+        }
+    }
+
+    return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
+}
