@@ -19,7 +19,9 @@
 #define EMPTY_PAIR     1
 #define WATER_PAIR     2
 #define MOUNTAIN_PAIR  3
-#define PLAYER_PAIR    4
+#define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
+#define TABLE_WIDTH 55
+#define AUX_HEIGHT 5
 
 typedef struct {
     WINDOW *window;
@@ -46,7 +48,10 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin(v->height, v->width, 0, 0);
+    v->window = newwin(v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    
+    // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+
     wrefresh(v->window);
 
     // Check color support
@@ -61,7 +66,16 @@ void view_init_ncurses(viewADT v) {
     init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_GREEN);
     init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
     init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
-    init_pair(PLAYER_PAIR, COLOR_RED, COLOR_MAGENTA);
+    // Colores para jugadores
+    init_pair(PLAYER_PAIR_BASE + 0, COLOR_WHITE, COLOR_RED);      // Jugador 1
+    init_pair(PLAYER_PAIR_BASE + 1, COLOR_WHITE, COLOR_GREEN);    // Jugador 2
+    init_pair(PLAYER_PAIR_BASE + 2, COLOR_WHITE, COLOR_YELLOW);   // Jugador 3
+    init_pair(PLAYER_PAIR_BASE + 3, COLOR_WHITE, COLOR_BLUE);     // Jugador 4
+    init_pair(PLAYER_PAIR_BASE + 4, COLOR_WHITE, COLOR_MAGENTA);  // Jugador 5
+    init_pair(PLAYER_PAIR_BASE + 5, COLOR_WHITE, COLOR_CYAN);     // Jugador 6
+    init_pair(PLAYER_PAIR_BASE + 6, COLOR_BLACK, COLOR_WHITE);    // Jugador 7
+    init_pair(PLAYER_PAIR_BASE + 7, COLOR_BLACK, COLOR_YELLOW);   // Jugador 8
+    init_pair(PLAYER_PAIR_BASE + 8, COLOR_BLACK, COLOR_GREEN);    // Jugador 9
 }
 
 // TODO: Agregar como libreria
@@ -98,25 +112,65 @@ void view_cleanup(viewADT v) {
 }
 
 void view_render(viewADT v) {
-    // Render board
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
+            int is_player = 0;
+            unsigned int player_idx = 0;
+            for (unsigned int p = 0; p < v->game_state->player_count; p++) {
+                if (v->game_state->players[p].x == j && v->game_state->players[p].y == i) {
+                    is_player = 1;
+                    player_idx = p;
+                    break;
+                }
+            }
             int value = v->game_state->board[i * v->width + j];
-
-            if (value == 0) {
-                wattron(v->window,COLOR_PAIR(PLAYER_PAIR));
-                mvwaddch(v->window, i, j, (char)' '); 
-                wattroff(v->window,COLOR_PAIR(PLAYER_PAIR));   
-            } else {
-                wattron(v->window,COLOR_PAIR(GRASS_PAIR));
-                mvwaddch(v->window, i, j, (char)' '); 
-                wattroff(v->window,COLOR_PAIR(GRASS_PAIR));   
+            int is_trail = 0;
+            unsigned int trail_player = 0;
+            if (!is_player) {
+                if (value < 0){
+                    is_trail = 1;
+                    trail_player = (unsigned int) ((-value)); // Ajuste para que A=0, B=1, etc.
+                } else if (value == 0) {
+                    is_trail = 1;
+                    trail_player = 0;
+                }
             }
 
+            //Muestra tablero de datos
+            
+            // Título de la tabla
+            const char *title = "Chomp Champs - Tabla de Jugadores";
+            int title_length = strlen(title);
+            int title_start_col = v->width + (TABLE_WIDTH - title_length) / 2;
+            mvwprintw(v->window, 1, title_start_col + 1, "%s", title);
+            mvwhline(v->window, 2, v->width + 2, '-', TABLE_WIDTH - 2);
+
+            // Encabezados de la tabla
+            mvwprintw(v->window, 3, v->width + 2, "%-10s | %-10s | %-10s | %-10s", "Jugador", "Puntaje", "Movimientos", "Inválidos");
+            mvwhline(v->window, 4, v->width + 2, '-', TABLE_WIDTH - 2);
+
+            // Datos de los jugadores
+            for (size_t i = 0; i < v->game_state->player_count; i++) {
+            mvwprintw(v->window, 5 + (int)i, v->width + 2, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);
+            }
+            wrefresh(v->window);
+
+
+            if (is_player) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
+                mvwaddch(v->window, i + 1, j + 1, 'A' + player_idx);
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
+            } else if (is_trail) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
+                mvwaddch(v->window, i + 1, j + 1, 'A' + trail_player);
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
+            } else {
+                mvwaddch(v->window, i + 1, j + 1, '0' + (value % 10));
+            }
         }
     }
-
-	wrefresh(v->window);
+    wborder(v->window, '|', '|', '-', '-', '+', '+', '+', '+');
+    wrefresh(v->window);
 }
 
 int main(int argc, char **argv) {

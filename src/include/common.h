@@ -4,6 +4,15 @@
 #define GAME_STATE_SHM "/game_state"
 #define GAME_SYNC_SHM "/game_sync"
 
+#ifndef COMMON_H
+#define COMMON_H
+
+#include <semaphore.h>  
+#include <stdbool.h>
+
+#define GAME_STATE_SHM "/game_state"
+#define GAME_SYNC_SHM "/game_sync"
+
 typedef struct { 
     char name[16]; // Nombre del jugador
     unsigned int score; // Puntaje
@@ -33,3 +42,5 @@ typedef struct {
     unsigned int reader_count; // Cantidad de jugadores leyendo el estado
     sem_t player_can_move[9];      // Le indican a cada jugador que puede enviar 1 movimiento
 } GameSync;
+
+#endif // COMMON_H

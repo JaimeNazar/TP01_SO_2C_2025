@@ -1,5 +1,17 @@
-all: 
+
+all: check-dependencies 
 	cd src; make all
+
+check-dependencies:
+# Verificar si ncurses esta instalado, si no instalarlo.
+# Solo para distros que usan apt
+
+ifeq ($(shell test -f /usr/include/ncurses.h && echo yes || echo no), no)
+	@echo "ncurses not found. Installing..."
+	apt install ncurses-dev
+else
+	@echo "ncurses found."
+endif
 
 clean:
 	cd src; make clean
