@@ -21,7 +21,7 @@
 #define MOUNTAIN_PAIR  3
 #define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
 #define TABLE_WIDTH 55
-
+#define AUX_HEIGHT 5
 
 typedef struct {
     WINDOW *window;
@@ -48,7 +48,10 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin(v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    v->window = newwin(v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    
+    // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+
     wrefresh(v->window);
 
     // Check color support
@@ -139,16 +142,17 @@ void view_render(viewADT v) {
             const char *title = "Chomp Champs - Tabla de Jugadores";
             int title_length = strlen(title);
             int title_start_col = v->width + (TABLE_WIDTH - title_length) / 2;
-            mvwprintw(v->window, 1, title_start_col, "%s", title);
-            mvwhline(v->window, 2, v->width + 1, '-', TABLE_WIDTH - 2);
+            mvwprintw(v->window, 1, title_start_col + 1, "%s", title);
+            mvwhline(v->window, 2, v->width + 2, '-', TABLE_WIDTH - 2);
 
             // Encabezados de la tabla
-            mvwprintw(v->window, 3, v->width + 1, "%-10s | %-10s | %-10s | %-10s", "Jugador", "Puntaje", "Movimientos", "Inválidos");
-            mvwhline(v->window, 4, v->width + 1, '-', TABLE_WIDTH - 2);
+            mvwprintw(v->window, 3, v->width + 2, "%-10s | %-10s | %-10s | %-10s", "Jugador", "Puntaje", "Movimientos", "Inválidos");
+            mvwhline(v->window, 4, v->width + 2, '-', TABLE_WIDTH - 2);
 
             // Datos de los jugadores
             for (size_t i = 0; i < v->game_state->player_count; i++) {
-            mvwprintw(v->window, 5 + (int)i, v->width + 1, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);            }
+            mvwprintw(v->window, 5 + (int)i, v->width + 2, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);
+            }
             wrefresh(v->window);
 
 
