@@ -15,6 +15,8 @@
 
 #include "common.h"
 
+#define RET_CHILD 1
+
 #define MAX_STR_LEN 20
 
 #define DEFAULT_WIDTH 10
@@ -25,7 +27,7 @@
 
 // NOTE: Usar malloc para los strings?
 typedef struct {
-	int width, height, delay, seed;
+	int width, height, delay, seed;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
 	char view_path[MAX_STR_LEN];
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
 	int player_count;
@@ -36,7 +38,7 @@ typedef struct {
 
 typedef MasterCDT* MasterADT;
 
-// TODO: Hacer que retornen algo diferente de 0 en caso de error
+// TODO: Hacer que retornen algo diferente de 0 en caso de error y manejar errores
 
 /* Funcion auxiliar, copia contenidos de un string a otro. 
  * Realizando verificaciones correspondientes. 
@@ -119,14 +121,22 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 }
 
 static int init_state(MasterADT m) {
-	
-	//m->game_state->board = malloc(sizeof(int) * m->width * m->height);
-	//if (m->game_state->board == NULL) {
-	//	printf("MASTER::INIT_STATE: Failed to reserve memory\n");
-	//	return -1;
-	//}
+
+	m->game_state->width = m->width;
+	m->game_state->height = m->height;
+	m->game_state->player_count = m->player_count;
+	m->game_state->finished = 0;
 
 	// Llenar el tablero
+	srand(m->seed);
+
+	for (int i = 0; i < m->height; i++) {
+		for (int j = 0; j < m->width; j++) {
+
+			m->game_state->board[i * m->width + j] = 1 + rand() % 9;	// Numero entre 1 y 9
+
+		}
+	}
 
 	return 0;
 }
@@ -152,14 +162,75 @@ static int init_shm(MasterADT m) {
 
 	// TODO: Error check, investigar flags, son las de ChompChamps sacadas con strace
 	// Game state
+	int state_size = sizeof(GameState) + m->width * m->height * sizeof(int);
+	
 	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0644);  
-	ftruncate(m->game_state_fd, sizeof(GameState));  
-	m->game_state = mmap(0, sizeof(GameState), PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
+	ftruncate(m->game_state_fd, state_size);	// Agregar tambien el espacio que ocupara board  
+	m->game_state = mmap(0, state_size, PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
 
 	// Game sync
 	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0666);  
 	ftruncate(m->game_sync_fd, sizeof(GameSync));  
 	m->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
+
+	return 0;
+}
+
+static int init_childs(MasterADT m) {
+
+	// Preparar argumentos
+	char arg1[MAX_STR_LEN];
+	char arg2[MAX_STR_LEN];
+
+	char* argv[] = {arg1, arg2};
+	
+	sprintf(arg1, "%d", m->width);
+	sprintf(arg2, "%d", m->height);
+
+	// Primero la vista(antes del pipe)
+	int view_pid = fork();
+	if (view_pid == 0) {
+		execve(m->view_path, argv, NULL);
+	
+		return RET_CHILD; 
+	}
+
+	// Ahora preparar el pipe
+	int pipe_fd[2]; // Aca se guardan los dos extremos
+
+    if (pipe(pipe_fd) == -1) {
+		printf("MASTER::INIT_CHILDS: Error creating pipe\n");
+
+        return -1;
+    }
+
+	// Luego los jugadores
+	int player_pid = -1;
+	
+	for (int i = 0; i < m->player_count; i++) {
+		player_pid = fork();
+		
+		if (player_pid == 0) {
+			
+			// Configurar los fd del jugador
+			close(pipe_fd[0]);	// Cerrar salida del pipe
+			dup2(pipe_fd[1], 1); // Cerrar stdout y duplicar entrada del pipe a stdout
+			close(pipe_fd[1]);	// Ya no necesita este fd 
+
+			execve(m->player_path[i], argv, NULL);
+	
+			return RET_CHILD; 
+		}
+
+		// Agregar al game state
+		m->game_state->players[i].pid = player_pid;
+
+	}
+
+	// Si llegue aca estoy en master, configurar pipe
+	close(pipe_fd[1]);
+	dup2(pipe_fd[0], 0);
+	close(pipe_fd[0]);
 
 	return 0;
 }
@@ -182,8 +253,7 @@ static int cleanup(MasterADT m) {
 	// Liberar memoria compartida
 	close_shm(m);
 
-	// Liberar memoria tablero
-	//free(m->game_state->board);
+
 
 	return 0;
 }
@@ -212,6 +282,13 @@ int main (int argc, char *argv[]) {
 	init_shm(&m); // Se debe llamar primero
 	init_state(&m);
 	init_sync(&m);
+	// TODO: Imprimir informacion del juego como el ejemplo
+
+	if (init_childs(&m) == RET_CHILD)
+		return 0;	// Terminar master si estamos en un child
+
+	// EXPERIMENTAL - main loop
+	
 
 	// Una vez termino todo, liberar recursos
     cleanup(&m);
