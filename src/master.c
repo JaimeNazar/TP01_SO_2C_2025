@@ -14,8 +14,7 @@
 // TODO: Put in common.h shared dependencies
 
 #include "common.h"
-
-#define RET_CHILD 1
+#include <errno.h>
 
 #define MAX_STR_LEN 20
 
@@ -143,9 +142,8 @@ static int init_state(MasterADT m) {
 
 static int init_sync(MasterADT m) {
 	
-
 	// Crear semaforos
-	sem_init(&m->game_sync->state_change, 1, 0);
+	sem_init(&m->game_sync->state_change, 1, 0); 
 	sem_init(&m->game_sync->render_done, 1, 0);
 	sem_init(&m->game_sync->master_mutex, 1, 0);
 	sem_init(&m->game_sync->state_mutex, 1, 0);
@@ -164,14 +162,14 @@ static int init_shm(MasterADT m) {
 	// Game state
 	int state_size = sizeof(GameState) + m->width * m->height * sizeof(int);
 	
-	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0644);  
+	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR, 0644);  
 	ftruncate(m->game_state_fd, state_size);	// Agregar tambien el espacio que ocupara board  
 	m->game_state = mmap(0, state_size, PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
 
 	// Game sync
-	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR | FD_CLOEXEC, 0666);  
+	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR, 0666);  
 	ftruncate(m->game_sync_fd, sizeof(GameSync));  
-	m->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
+	m->game_sync = mmap(0, sizeof(GameSync), PROT_WRITE | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
 
 	return 0;
 }
@@ -182,7 +180,7 @@ static int init_childs(MasterADT m) {
 	char arg1[MAX_STR_LEN];
 	char arg2[MAX_STR_LEN];
 
-	char* argv[] = {arg1, arg2};
+	char* argv[] = {m->view_path, arg1, arg2, NULL}; // Debe terminar en un puntero a NULL
 	
 	sprintf(arg1, "%d", m->width);
 	sprintf(arg2, "%d", m->height);
@@ -190,9 +188,7 @@ static int init_childs(MasterADT m) {
 	// Primero la vista(antes del pipe)
 	int view_pid = fork();
 	if (view_pid == 0) {
-		execve(m->view_path, argv, NULL);
-	
-		return RET_CHILD; 
+		return execve(m->view_path, argv, NULL); 
 	}
 
 	// Ahora preparar el pipe
@@ -208,6 +204,8 @@ static int init_childs(MasterADT m) {
 	int player_pid = -1;
 	
 	for (int i = 0; i < m->player_count; i++) {
+		argv[0] = m->player_path[i]; // El primer argumento es el nombre del programa
+
 		player_pid = fork();
 		
 		if (player_pid == 0) {
@@ -217,9 +215,7 @@ static int init_childs(MasterADT m) {
 			dup2(pipe_fd[1], 1); // Cerrar stdout y duplicar entrada del pipe a stdout
 			close(pipe_fd[1]);	// Ya no necesita este fd 
 
-			execve(m->player_path[i], argv, NULL);
-	
-			return RET_CHILD; 
+			return execve(m->player_path[i], argv, NULL);
 		}
 
 		// Agregar al game state
@@ -257,6 +253,43 @@ static int cleanup(MasterADT m) {
 
 	return 0;
 }
+static int game_start(MasterADT m) {
+
+	while (!m->game_state->finished) {
+		// Sincronizacion vista
+		sem_post(&m->game_sync->state_change);
+
+		struct timespec ts;
+		if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
+		{
+			/* handle error */
+			return -1;
+		}
+
+		ts.tv_sec += 1;
+		int s;
+		s = sem_timedwait(&m->game_sync->render_done, &ts);
+		
+		// Verificar resultado del wait
+		if (s == -1)
+		{
+			if (errno == ETIMEDOUT)
+				printf("View must sem_post(render_done)\n");
+			else
+				perror("sem_timedwait");
+
+			// NOTE: sem_post del mutex
+			m->game_state->finished = 1;
+			return -1;
+		} 		
+
+		// Sincronizacion jugador
+		sem_post(&m->game_sync->player_can_move[0]);	
+
+	}
+
+	return 0;
+}
 
 int main (int argc, char *argv[]) {
 
@@ -284,11 +317,14 @@ int main (int argc, char *argv[]) {
 	init_sync(&m);
 	// TODO: Imprimir informacion del juego como el ejemplo
 
-	if (init_childs(&m) == RET_CHILD)
-		return 0;	// Terminar master si estamos en un child
+	if (init_childs(&m) == -1) {
+		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
+
+		return -1;
+	}
 
 	// EXPERIMENTAL - main loop
-	
+	game_start(&m);	
 
 	// Una vez termino todo, liberar recursos
     cleanup(&m);
