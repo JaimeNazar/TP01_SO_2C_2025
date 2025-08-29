@@ -33,6 +33,7 @@ typedef struct {
 	GameState *game_state;
 	GameSync *game_sync;
 	int game_state_fd, game_sync_fd;
+	int pipes[MAX_PLAYERS];		// fd de la salida de los pipes de cada jugador
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
@@ -191,19 +192,19 @@ static int init_childs(MasterADT m) {
 		return execve(m->view_path, argv, NULL); 
 	}
 
-	// Ahora preparar el pipe
+	// Ahora preparar los pipes
 	int pipe_fd[2]; // Aca se guardan los dos extremos
-
-    if (pipe(pipe_fd) == -1) {
-		printf("MASTER::INIT_CHILDS: Error creating pipe\n");
-
-        return -1;
-    }
 
 	// Luego los jugadores
 	int player_pid = -1;
 	
 	for (int i = 0; i < m->player_count; i++) {
+		if (pipe(pipe_fd) == -1) {
+			printf("MASTER::INIT_CHILDS: Error creating pipe\n");
+
+			return -1;
+		}
+
 		argv[0] = m->player_path[i]; // El primer argumento es el nombre del programa
 
 		player_pid = fork();
@@ -221,12 +222,10 @@ static int init_childs(MasterADT m) {
 		// Agregar al game state
 		m->game_state->players[i].pid = player_pid;
 
+		// Si llegue aca estoy en master, configurar pipe
+		close(pipe_fd[1]); // Este no lo necesito
+		m->pipes[i] = pipe_fd[0];
 	}
-
-	// Si llegue aca estoy en master, configurar pipe
-	close(pipe_fd[1]);
-	dup2(pipe_fd[0], 0);
-	close(pipe_fd[0]);
 
 	return 0;
 }
@@ -249,10 +248,46 @@ static int cleanup(MasterADT m) {
 	// Liberar memoria compartida
 	close_shm(m);
 
-
+	for (int i = 0; i < m->player_count; i++) {
+		close(m->pipes[i]);
+	}
 
 	return 0;
 }
+
+static int check_player(MasterADT m, int player_id) {
+
+	sem_post(&m->game_sync->player_can_move[player_id]);	
+	sem_post(&m->game_sync->state_mutex);
+
+	
+	sem_post(&m->game_sync->master_mutex);
+	char c = -1;	
+	// TODO: Error check read bytes
+	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
+
+
+	switch(c) {
+		case 0:
+			m->game_state->players[player_id].y++;
+
+			int x = m->game_state->players[player_id].x;
+			int y = m->game_state->players[player_id].y;
+
+			// NOTE: No es seguro
+			m->game_state->board[y*m->game_state->width + x] = 0;
+
+			break;
+		default:
+			m->game_state->players[player_id].invalid_reqs++;
+
+	};
+	
+	m->game_state->players[0].valid_reqs = c;
+
+	return 0;
+}
+
 static int game_start(MasterADT m) {
 
 	while (!m->game_state->finished) {
@@ -278,14 +313,23 @@ static int game_start(MasterADT m) {
 			else
 				perror("sem_timedwait");
 
-			// NOTE: sem_post del mutex
+			// NOTE: sem_post del mutex?
 			m->game_state->finished = 1;
 			return -1;
 		} 		
+		
+		// Termino de leer game state
+		m->game_sync->reader_count--;
+		sem_post(&m->game_sync->reader_count_mutex);
+
 
 		// Sincronizacion jugador
-		sem_post(&m->game_sync->player_can_move[0]);	
+		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
+		//check_player(m, 0);
 
+		// Vuelve a leer el estado
+		sem_wait(&m->game_sync->reader_count_mutex);
+		m->game_sync->reader_count++;
 	}
 
 	return 0;
@@ -303,7 +347,8 @@ int main (int argc, char *argv[]) {
 					0,
 					0,
 					0,
-					0 };
+					0,
+					{ 0 }};
 
 	if (parse_args(&m, argc, argv)) {
 		printf("Usage: ./ChompChamps [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
