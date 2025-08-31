@@ -269,21 +269,23 @@ static int check_player(MasterADT m, int player_id) {
 
 	switch(c) {
 		case 0:
-			m->game_state->players[player_id].y++;
 
-			int x = m->game_state->players[player_id].x;
-			int y = m->game_state->players[player_id].y;
-
-			// NOTE: No es seguro
-			m->game_state->board[y*m->game_state->width + x] = 0;
+			// NOTE: Temporal, para que ande
+			
+		//	m->game_state->players[player_id].y++;
 
 			break;
 		default:
 			m->game_state->players[player_id].invalid_reqs++;
 
 	};
-	
-	m->game_state->players[0].valid_reqs = c;
+
+	// Actualizar board
+	int x = m->game_state->players[player_id].x;
+	int y = m->game_state->players[player_id].y;
+
+	// NOTE: No es seguro
+	m->game_state->board[y*m->game_state->width + x] = -1 * player_id;	
 
 	return 0;
 }
@@ -325,7 +327,7 @@ static int game_start(MasterADT m) {
 
 		// Sincronizacion jugador
 		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
-		//check_player(m, 0);
+		check_player(m, 0);
 
 		// Vuelve a leer el estado
 		sem_wait(&m->game_sync->reader_count_mutex);
