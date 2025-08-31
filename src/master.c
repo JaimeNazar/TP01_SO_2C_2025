@@ -159,11 +159,17 @@ static int init_sync(MasterADT m) {
 
 static int init_shm(MasterADT m) {
 
-	// TODO: Error check, investigar flags, son las de ChompChamps sacadas con strace
+	// TODO: codigo repetido? o son lo suficientemente diferentes?
 	// Game state
 	int state_size = sizeof(GameState) + m->width * m->height * sizeof(int);
 	
 	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR, 0644);  
+	if (m->game_state_fd == -1) {
+		perror("MASTER::INIT_SHM: Failed to open state shared memory");	// Usar perror porque devuelvo informacion del errno
+
+		return -1;
+	}
+
 	ftruncate(m->game_state_fd, state_size);	// Agregar tambien el espacio que ocupara board  
 	m->game_state = mmap(0, state_size, PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
 
@@ -171,6 +177,11 @@ static int init_shm(MasterADT m) {
 	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR, 0666);  
 	ftruncate(m->game_sync_fd, sizeof(GameSync));  
 	m->game_sync = mmap(0, sizeof(GameSync), PROT_WRITE | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
+	if (m->game_sync_fd == -1) {
+		perror("MASTER::INIT_SHM: Failed to open sync shared memory\n");
+
+		return -1;
+	}
 
 	return 0;
 }
@@ -359,22 +370,24 @@ int main (int argc, char *argv[]) {
 	}
 
 	// Setup inicial
-	init_shm(&m); // Se debe llamar primero
+	if (init_shm(&m) == -1) // Se debe llamar primero
+		return -1;					  
+
 	init_state(&m);
-	init_sync(&m);
+	//init_sync(&m);
 	// TODO: Imprimir informacion del juego como el ejemplo
 
-	if (init_childs(&m) == -1) {
-		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
+	//if (init_childs(&m) == -1) {
+	//	printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
 
-		return -1;
-	}
+	//	return -1;
+	//}
 
 	// EXPERIMENTAL - main loop
-	game_start(&m);	
+	//game_start(&m);	
 
 	// Una vez termino todo, liberar recursos
-    cleanup(&m);
+   // cleanup(&m);
 
 	return 0;
 }
