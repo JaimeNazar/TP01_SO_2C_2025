@@ -343,8 +343,8 @@ static int check_player(MasterADT m, int player_id) {
 	};
 
 	// Chequear si la nueva posicion es valida
-	if (x <= 0 || y <= 0 || x+1 >= m->game_state->width || y+1 >= m->game_state->height 
-			|| m->game_state->board[y*m->game_state->width + x] <= 0) {
+	if (x >= m->game_state->width || y >= m->game_state->height
+    || m->game_state->board[y*m->game_state->width + x] <= 0) {
 
 		m->game_state->players[player_id].invalid_reqs++;
 
