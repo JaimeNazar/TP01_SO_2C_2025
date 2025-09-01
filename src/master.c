@@ -161,7 +161,7 @@ static int init_sync(MasterADT m) {
 	sem_init(&m->game_sync->render_done, 1, 0);
 	sem_init(&m->game_sync->master_mutex, 1, 0);
 	sem_init(&m->game_sync->state_mutex, 1, 0);
-	sem_init(&m->game_sync->reader_count_mutex, 1, 0);	
+	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
 
 	for (int i = 0; i < m->player_count; i++) {
 		sem_init(&m->game_sync->player_can_move[i], 1, 0);
@@ -288,7 +288,6 @@ static int check_player(MasterADT m, int player_id) {
 	sem_post(&m->game_sync->player_can_move[player_id]);	
 	sem_post(&m->game_sync->state_mutex);
 
-	
 	sem_post(&m->game_sync->master_mutex);
 	char c = -1;	
 
@@ -366,35 +365,17 @@ static int game_start(MasterADT m) {
 
 	while (!m->game_state->finished) {
 
+		// Leer sync
+		sem_wait(&m->game_sync->reader_count_mutex);
+		m->game_sync->reader_count++;
+
 		// Timeout para que sea mas humana la velocidad
 		sleep(1);
 
 		// Sincronizacion vista
 		sem_post(&m->game_sync->state_change);
 
-		struct timespec ts;
-		if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
-		{
-			/* handle error */
-			return -1;
-		}
-
-		ts.tv_sec += 1;
-		int s;
-		s = sem_timedwait(&m->game_sync->render_done, &ts);
-		
-		// Verificar resultado del wait
-		if (s == -1)
-		{
-			if (errno == ETIMEDOUT)
-				printf("View must sem_post(render_done)\n");
-			else
-				perror("sem_timedwait");
-
-			// NOTE: sem_post del mutex?
-			m->game_state->finished = 1;
-			return -1;
-		} 		
+		sem_wait(&m->game_sync->render_done);
 		
 		// Termino de leer game state
 		m->game_sync->reader_count--;
@@ -405,9 +386,6 @@ static int game_start(MasterADT m) {
 		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
 		check_player(m, 0);
 
-		// Vuelve a leer el estado
-		sem_wait(&m->game_sync->reader_count_mutex);
-		m->game_sync->reader_count++;
 	}
 
 	return 0;
