@@ -138,6 +138,19 @@ static int init_state(MasterADT m) {
 		}
 	}
 
+	// Inicializar jugadores, sino estan en un estado inconsistente
+	for (int i = 0; i < MAX_PLAYERS; i++) {
+		// TODO: Hacer que empiecen en un lugar random
+
+		 m->game_state->players[i].score = 0;
+		 m->game_state->players[i].invalid_reqs = 0;
+		 m->game_state->players[i].valid_reqs = 0;
+		 m->game_state->players[i].x = 0;
+		 m->game_state->players[i].y = 0;
+		 m->game_state->players[i].pid = -1;
+		 m->game_state->players[i].blocked = 0;
+	}
+
 	return 0;
 }
 
@@ -266,6 +279,10 @@ static int cleanup(MasterADT m) {
 	return 0;
 }
 
+/*
+ * Procesa el estado de un jugador.
+ * En caso de recibir un id invalido retorna 01.
+ */
 static int check_player(MasterADT m, int player_id) {
 
 	sem_post(&m->game_sync->player_can_move[player_id]);	
@@ -274,29 +291,73 @@ static int check_player(MasterADT m, int player_id) {
 	
 	sem_post(&m->game_sync->master_mutex);
 	char c = -1;	
+
 	// TODO: Error check read bytes
 	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
+	
+	// Guardar posiciones de inicio para luego modificarlas en el switch
+	unsigned short x = m->game_state->players[player_id].x;
+	unsigned short y = m->game_state->players[player_id].y;
 
-
+	// TODO: Estos son los codigos de movimientos correctos?
 	switch(c) {
-		case 0:
+		case 0:	// Arriba	
+			y--;	
 
-			// NOTE: Temporal, para que ande
-			
-		//	m->game_state->players[player_id].y++;
+			break;
+		case 1:	// Arriba-derecha		
+			y--;
+			x++;
+
+			break;
+		case 2: // Derecha
+			x++;
+
+			break;
+		case 3: // Abajo-derecha
+			y++;
+			x++;
+
+			break;
+		case 4: // abajo
+			y++;
+
+			break;
+		case 5:	// Abajo-izquierda
+			y++;
+			x--;
+
+			break;
+		case 6: // Izquierda
+			x--;	
+
+			break;
+		case 7:	// Arriba-izquierda
+			y--;
+			x--;
 
 			break;
 		default:
-			m->game_state->players[player_id].invalid_reqs++;
 
+			break;
 	};
 
-	// Actualizar board
-	int x = m->game_state->players[player_id].x;
-	int y = m->game_state->players[player_id].y;
+	// Chequear si la nueva posicion es valida
+	if (x <= 0 || y <= 0 || x+1 >= m->game_state->width || y+1 >= m->game_state->height 
+			|| m->game_state->board[y*m->game_state->width + x] <= 0) {
 
-	// NOTE: No es seguro
-	m->game_state->board[y*m->game_state->width + x] = -1 * player_id;	
+		m->game_state->players[player_id].invalid_reqs++;
+
+		// TODO: Verificar cuando queda bloqueado
+	} else {
+		m->game_state->players[player_id].valid_reqs++;
+
+		// Actualizar estado
+		m->game_state->players[player_id].x = x;
+		m->game_state->players[player_id].y = y;
+
+		m->game_state->board[y*m->game_state->width + x] = -1 * player_id;	
+	} 
 
 	return 0;
 }
@@ -304,6 +365,10 @@ static int check_player(MasterADT m, int player_id) {
 static int game_start(MasterADT m) {
 
 	while (!m->game_state->finished) {
+
+		// Timeout para que sea mas humana la velocidad
+		sleep(1);
+
 		// Sincronizacion vista
 		sem_post(&m->game_sync->state_change);
 
@@ -374,20 +439,20 @@ int main (int argc, char *argv[]) {
 		return -1;					  
 
 	init_state(&m);
-	//init_sync(&m);
+	init_sync(&m);
 	// TODO: Imprimir informacion del juego como el ejemplo
 
-	//if (init_childs(&m) == -1) {
-	//	printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
+	if (init_childs(&m) == -1) {
+		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
 
-	//	return -1;
-	//}
+		return -1;
+	}
 
 	// EXPERIMENTAL - main loop
-	//game_start(&m);	
+	game_start(&m);	
 
 	// Una vez termino todo, liberar recursos
-   // cleanup(&m);
+    cleanup(&m);
 
 	return 0;
 }
