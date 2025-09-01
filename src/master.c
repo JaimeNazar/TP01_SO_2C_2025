@@ -21,12 +21,13 @@
 #define DEFAULT_WIDTH 10
 #define DEFAULT_HEIGHT 10
 #define DEFAULT_DELAY 200
+#define DEFAULT_TIMEOUT 0
 #define MAX_PLAYERS 9
 #define MIN_PLAYERS 1
 
 // NOTE: Usar malloc para los strings?
 typedef struct {
-	int width, height, delay, seed;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
+	int width, height, delay, seed,timeout;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
 	char view_path[MAX_STR_LEN];
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
 	int player_count;
@@ -97,7 +98,44 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 					}
 
 					break;
-				default:
+                case 'd':
+                    i++;
+                    if (i >= argc) {
+                        printf("MASTER::PARSE: Missing value for -d\n");
+                        return -1;
+                    }
+                    m->delay = atoi(argv[i]);
+                    i++;
+                    break;
+
+                case 't':
+                    i++;
+                    if (i >= argc) {
+                        printf("MASTER::PARSE: Missing value for -t\n");
+                        return -1;
+                    }
+                    m->timeout = atoi(argv[i]);
+                    i++;
+                    break;
+
+                case 'w':
+                    i++;
+                    m->game_state->width = atoi(argv[i]);
+                    i++;
+                    break;
+
+                case 'h':
+                    i++;
+                    m->game_state->height = atoi(argv[i]);
+                    i++;
+                    break;
+
+                case 's':
+                    i++;
+                    m->seed = atoi(argv[i]);
+                    i++;
+                    break;
+                default:
 					printf("MASTER::PARSE: Invalid argument type: %c \n", argv[i][1]);
 					return -1;
 
@@ -119,6 +157,15 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 
 	return 0;
 }
+
+void esperar_delay(int delay_ms) {
+    struct timespec ts;
+    ts.tv_sec  = delay_ms / 1000;
+    ts.tv_nsec = (delay_ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);  //usamos nanoslepp pues usleep no funciona
+}
+
+
 
 static int init_state(MasterADT m) {
 
@@ -376,7 +423,7 @@ static int game_start(MasterADT m) {
 		sem_post(&m->game_sync->state_change);
 
 		sem_wait(&m->game_sync->render_done);
-		
+        esperar_delay(m->delay);
 		// Termino de leer game state
 		m->game_sync->reader_count--;
 		sem_post(&m->game_sync->reader_count_mutex);
@@ -397,6 +444,7 @@ int main (int argc, char *argv[]) {
 					DEFAULT_HEIGHT,
 					DEFAULT_DELAY,
 					time(NULL),
+                    DEFAULT_TIMEOUT,
 					{ 0 },
 					{ {0} },
 					0,
@@ -414,7 +462,7 @@ int main (int argc, char *argv[]) {
 
 	// Setup inicial
 	if (init_shm(&m) == -1) // Se debe llamar primero
-		return -1;					  
+		return -1;
 
 	init_state(&m);
 	init_sync(&m);
@@ -429,8 +477,8 @@ int main (int argc, char *argv[]) {
 	// EXPERIMENTAL - main loop
 	game_start(&m);	
 
-	// Una vez termino todo, liberar recursos
+	// Una vez termino t odo , liberar recursos
     cleanup(&m);
-
+    // todo : imprimir resultados
 	return 0;
 }
