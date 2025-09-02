@@ -27,10 +27,9 @@
 
 // NOTE: Usar malloc para los strings?
 typedef struct {
-	int width, height, delay, seed,timeout;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
+	int delay, seed, timeout;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
 	char view_path[MAX_STR_LEN];
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
-	int player_count;
 	GameState *game_state;
 	GameSync *game_sync;
 	int game_state_fd, game_sync_fd;
@@ -57,7 +56,7 @@ static int str_copy(char *s1, char *s2) {
 	return 0;
 }
 
-static int parse_args(MasterADT m, int argc, char *argv[]) {
+static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, unsigned int* height, unsigned int *player_count) {
 
 	int i = 1;	// Saltearse nombre del programa
 
@@ -83,17 +82,17 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 					// TODO: Modularizar, son muchas cosas anidadas
 					// Guardar jugadores hasta el proximo argumento
 					while (i < argc && argv[i][0] != '-') {
-						if (m->player_count >= MAX_PLAYERS) {
+						if (*player_count >= MAX_PLAYERS) {
 							printf("MASTER::PARSE: Too many players, max is %d\n", MAX_PLAYERS);
 							return -1;
 						}
 
-						if (str_copy(m->player_path[m->player_count], argv[i])) {
+						if (str_copy(m->player_path[*player_count], argv[i])) {
 							printf("MASTER::PARSE: Invalid player path\n");
 							return -1;
 						}
 						
-						m->player_count++;
+						(*player_count)++;
 						i++;
 					}
 
@@ -120,13 +119,13 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 
                 case 'w':
                     i++;
-                    m->game_state->width = atoi(argv[i]);
+                    *width = atoi(argv[i]);
                     i++;
                     break;
 
                 case 'h':
                     i++;
-                    m->game_state->height = atoi(argv[i]);
+                    *height = atoi(argv[i]);
                     i++;
                     break;
 
@@ -150,10 +149,16 @@ static int parse_args(MasterADT m, int argc, char *argv[]) {
 	}
 
 	// Si no se registro ningun jugador al llegar aca, notificar al usuario
-	if(m->player_count < MIN_PLAYERS) {
+	if(*player_count < MIN_PLAYERS) {
 		printf("MASTER::PARSE: At least one player must be specified\n");
 		return -1;
 	}
+
+	if (*width <= 0)
+		*width = DEFAULT_WIDTH;
+
+	if (*height <= 0)
+		*height = DEFAULT_HEIGHT;
 
 	return 0;
 }
@@ -166,62 +171,25 @@ void esperar_delay(int delay_ms) {
 }
 
 
-
-static int init_state(MasterADT m) {
-
-	m->game_state->width = m->width;
-	m->game_state->height = m->height;
-	m->game_state->player_count = m->player_count;
-	m->game_state->finished = 0;
-
-	// Llenar el tablero
-	srand(m->seed);
-
-	for (int i = 0; i < m->height; i++) {
-		for (int j = 0; j < m->width; j++) {
-
-			m->game_state->board[i * m->width + j] = 1 + rand() % 9;	// Numero entre 1 y 9
-
-		}
-	}
-
-	// Inicializar jugadores, sino estan en un estado inconsistente
-	for (int i = 0; i < MAX_PLAYERS; i++) {
-		// TODO: Hacer que empiecen en un lugar random
-
-		 m->game_state->players[i].score = 0;
-		 m->game_state->players[i].invalid_reqs = 0;
-		 m->game_state->players[i].valid_reqs = 0;
-		 m->game_state->players[i].x = 0;
-		 m->game_state->players[i].y = 0;
-		 m->game_state->players[i].pid = -1;
-		 m->game_state->players[i].blocked = 0;
-	}
-
-	return 0;
-}
-
-static int init_sync(MasterADT m) {
+MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	
-	// Crear semaforos
-	sem_init(&m->game_sync->state_change, 1, 0); 
-	sem_init(&m->game_sync->render_done, 1, 0);
-	sem_init(&m->game_sync->master_mutex, 1, 0);
-	sem_init(&m->game_sync->state_mutex, 1, 0);
-	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
+	MasterADT m = calloc(0, sizeof(MasterCDT));
 
-	for (int i = 0; i < m->player_count; i++) {
-		sem_init(&m->game_sync->player_can_move[i], 1, 0);
+	if (m == NULL) {
+		return NULL;
 	}
 
-	return 0;
+	m->delay = delay;
+	m->seed = seed;
+	m->timeout = timeout;
+
+	return m;
 }
 
-static int init_shm(MasterADT m) {
+static int init_state(MasterADT m, unsigned int width, unsigned int height, unsigned int player_count) {
 
-	// TODO: codigo repetido? o son lo suficientemente diferentes?
-	// Game state
-	int state_size = sizeof(GameState) + m->width * m->height * sizeof(int);
+	// Inicializar memoria compartida
+	int state_size = sizeof(GameState) + width * height * sizeof(int); // Agregar tambien el espacio que ocupara board  
 	
 	m->game_state_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR, 0644);  
 	if (m->game_state_fd == -1) {
@@ -230,10 +198,47 @@ static int init_shm(MasterADT m) {
 		return -1;
 	}
 
-	ftruncate(m->game_state_fd, state_size);	// Agregar tambien el espacio que ocupara board  
+	ftruncate(m->game_state_fd, state_size);	
 	m->game_state = mmap(0, state_size, PROT_WRITE | PROT_READ, MAP_SHARED, m->game_state_fd, 0);
 
-	// Game sync
+	// Inicializar valores
+	GameState* gs = m->game_state;	
+
+	gs->finished = 0;
+	gs->width = width;
+	gs->height = height;
+	gs->player_count = player_count;
+
+	// Llenar el tablero
+	srand(m->seed);
+
+	for (unsigned int i = 0; i < gs->height; i++) {
+		for (int j = 0; j < gs->width; j++) {
+
+			gs->board[i * gs->width + j] = 1 + rand() % 9;	// Numero entre 1 y 9
+
+		}
+	}
+
+	// Inicializar jugadores, sino estan en un estado inconsistente
+	for (unsigned int i = 0; i < gs->player_count; i++) {
+		// TODO: Hacer que empiecen en un lugar random
+
+		 gs->players[i].score = 0;
+		 gs->players[i].invalid_reqs = 0;
+		 gs->players[i].valid_reqs = 0;
+		 gs->players[i].x = 0;
+		 gs->players[i].y = 0;
+		 gs->players[i].pid = -1;
+		 gs->players[i].blocked = 0;
+	}
+
+	return 0;
+}
+
+static int init_sync(MasterADT m) {
+	
+	// Inicializar memoria compartida
 	m->game_sync_fd = shm_open(GAME_SYNC_SHM, O_CREAT | O_RDWR, 0666);  
 	ftruncate(m->game_sync_fd, sizeof(GameSync));  
 	m->game_sync = mmap(0, sizeof(GameSync), PROT_WRITE | PROT_READ, MAP_SHARED, m->game_sync_fd, 0);
@@ -243,10 +248,23 @@ static int init_shm(MasterADT m) {
 		return -1;
 	}
 
+	// Crear semaforos
+	sem_init(&m->game_sync->state_change, 1, 0); 
+	sem_init(&m->game_sync->render_done, 1, 0);
+	sem_init(&m->game_sync->master_mutex, 1, 0);
+	sem_init(&m->game_sync->state_mutex, 1, 0);
+	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
+
+	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+		sem_init(&m->game_sync->player_can_move[i], 1, 0);
+	}
+
 	return 0;
 }
 
 static int init_childs(MasterADT m) {
+
+	GameState* gs = m->game_state;
 
 	// Preparar argumentos
 	char arg1[MAX_STR_LEN];
@@ -254,8 +272,8 @@ static int init_childs(MasterADT m) {
 
 	char* argv[] = {m->view_path, arg1, arg2, NULL}; // Debe terminar en un puntero a NULL
 	
-	sprintf(arg1, "%d", m->width);
-	sprintf(arg2, "%d", m->height);
+	sprintf(arg1, "%d", gs->width);
+	sprintf(arg2, "%d", gs->height);
 
 	// Primero la vista(antes del pipe)
 	int view_pid = fork();
@@ -269,7 +287,7 @@ static int init_childs(MasterADT m) {
 	// Luego los jugadores
 	int player_pid = -1;
 	
-	for (int i = 0; i < m->player_count; i++) {
+	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
 			printf("MASTER::INIT_CHILDS: Error creating pipe\n");
 
@@ -316,12 +334,14 @@ static int close_shm(MasterADT m) {
 
 static int cleanup(MasterADT m) {
 
+	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+		close(m->pipes[i]);
+	}
+
 	// Liberar memoria compartida
 	close_shm(m);
 
-	for (int i = 0; i < m->player_count; i++) {
-		close(m->pipes[i]);
-	}
+	free(m);
 
 	return 0;
 }
@@ -438,47 +458,51 @@ static int game_start(MasterADT m) {
 	return 0;
 }
 
+
+
 int main (int argc, char *argv[]) {
 
-	MasterCDT m = { DEFAULT_WIDTH,
-					DEFAULT_HEIGHT,
-					DEFAULT_DELAY,
-					time(NULL),
-                    DEFAULT_TIMEOUT,
-					{ 0 },
-					{ {0} },
-					0,
-					0,
-					0,
-					0,
-					0,
-					{ 0 }};
+	// Inicializar con valores default
+	MasterADT m = init_master(time(NULL), DEFAULT_DELAY, DEFAULT_TIMEOUT);
 
-	if (parse_args(&m, argc, argv)) {
+	if (m == NULL) {
+		perror("MASTER::INIT_MASTER: Error allocating memory");
+
+		return -1;
+	}
+
+	// Guadar altura y ancho por separado pues las necesitamos para crear game state y se guardan en game state
+	unsigned int width = 0;
+	unsigned int height = 0;
+	unsigned int player_count = 0;
+
+	// Procesar argumentos
+	if (parse_args(m, argc, argv, &width, &height, &player_count)) {
 		printf("Usage: ./ChompChamps [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
 
+		cleanup(m);
 		return -1;
 	}
 
-	// Setup inicial
-	if (init_shm(&m) == -1) // Se debe llamar primero
+		// Setup inicial
+	if (init_state(m, width, height, player_count) == -1)
 		return -1;
 
-	init_state(&m);
-	init_sync(&m);
-	// TODO: Imprimir informacion del juego como el ejemplo
+	init_sync(m);
 
-	if (init_childs(&m) == -1) {
+	if (init_childs(m) == -1) {
 		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
 
+		cleanup(m);
 		return -1;
 	}
-
-	// EXPERIMENTAL - main loop
-	game_start(&m);	
+	// TODO: Imprimir informacion del juego como el ejemplo
+	//
+	// Main loop
+	game_start(m);	
 
 	// Una vez termino t odo , liberar recursos
-    cleanup(&m);
+    cleanup(m);
     // todo : imprimir resultados
 	return 0;
 }
