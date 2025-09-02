@@ -251,8 +251,8 @@ static int init_sync(MasterADT m) {
 	// Crear semaforos
 	sem_init(&m->game_sync->state_change, 1, 0); 
 	sem_init(&m->game_sync->render_done, 1, 0);
-	sem_init(&m->game_sync->master_mutex, 1, 0);
-	sem_init(&m->game_sync->state_mutex, 1, 0);
+	sem_init(&m->game_sync->master_mutex, 1, 1);
+	sem_init(&m->game_sync->state_mutex, 1, 1);
 	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
 
 	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
@@ -352,15 +352,14 @@ static int cleanup(MasterADT m) {
  */
 static int check_player(MasterADT m, int player_id) {
 
-	sem_post(&m->game_sync->player_can_move[player_id]);	
-	sem_post(&m->game_sync->state_mutex);
-
-	sem_post(&m->game_sync->master_mutex);
 	char c = -1;	
 
 	// TODO: Error check read bytes
 	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
-	
+	 
+	sem_wait(&m->game_sync->master_mutex);
+	sem_wait(&m->game_sync->state_mutex);	
+
 	// Guardar posiciones de inicio para luego modificarlas en el switch
 	unsigned short x = m->game_state->players[player_id].x;
 	unsigned short y = m->game_state->players[player_id].y;
@@ -425,6 +424,11 @@ static int check_player(MasterADT m, int player_id) {
 		m->game_state->board[y*m->game_state->width + x] = -1 * player_id;	
 	} 
 
+	sem_post(&m->game_sync->state_mutex);
+	sem_post(&m->game_sync->master_mutex);
+	
+	sem_post(&m->game_sync->player_can_move[player_id]);	
+
 	return 0;
 }
 
@@ -432,25 +436,17 @@ static int game_start(MasterADT m) {
 
 	while (!m->game_state->finished) {
 
-		// Leer sync
-		sem_wait(&m->game_sync->reader_count_mutex);
-		m->game_sync->reader_count++;
-
-		// Timeout para que sea mas humana la velocidad
-		sleep(1);
-
 		// Sincronizacion vista
 		sem_post(&m->game_sync->state_change);
 
 		sem_wait(&m->game_sync->render_done);
-        esperar_delay(m->delay);
-		// Termino de leer game state
-		m->game_sync->reader_count--;
-		sem_post(&m->game_sync->reader_count_mutex);
 
+		// Timeout para que sea mas humana la velocidad
+        esperar_delay(m->delay);
 
 		// Sincronizacion jugador
 		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
+		sem_post(&m->game_sync->player_can_move[0]);	
 		check_player(m, 0);
 
 	}
