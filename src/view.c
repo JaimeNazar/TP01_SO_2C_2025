@@ -22,6 +22,7 @@
 #define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
 #define TABLE_WIDTH 55
 #define AUX_HEIGHT 5
+#define FRAME 2
 
 typedef struct {
     WINDOW *window;
@@ -48,7 +49,8 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin(v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); // TABLE_WIDTH columnas extra para info 
+                                                                                                                        // y FRAME para el marco
     
     // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
 
