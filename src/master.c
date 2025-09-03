@@ -2,7 +2,8 @@
 #include <string.h>
 #include <time.h>
 #include <sys/mman.h> 
-#include <sys/stat.h>       
+#include <sys/stat.h>  
+#include <sys/select.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -227,8 +228,8 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 		 gs->players[i].score = 0;
 		 gs->players[i].invalid_reqs = 0;
 		 gs->players[i].valid_reqs = 0;
-		 gs->players[i].x = 0;
-		 gs->players[i].y = 0;
+		 gs->players[i].x = i;
+		 gs->players[i].y = i;
 		 gs->players[i].pid = -1;
 		 gs->players[i].blocked = 0;
 	}
@@ -446,8 +447,38 @@ static int game_start(MasterADT m) {
 
 		// Sincronizacion jugador
 		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
-		sem_post(&m->game_sync->player_can_move[0]);	
-		check_player(m, 0);
+		// sem_post(&m->game_sync->player_can_move[0]);	
+		// check_player(m, 0);
+
+		int max_fd = -1;
+		fd_set read_fds;
+		FD_ZERO(&read_fds);
+
+		// recalculamos cada vez el maximo fd y seteamos read_fds
+		for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+			FD_SET(m->pipes[i], &read_fds);
+			if (m->pipes[i] > max_fd) {
+				max_fd = m->pipes[i];
+			}
+		}
+
+		int ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+
+		if (ready == -1) {
+			perror("MASTER::GAME_START: Error with select");
+			return -1;
+		} else if (ready > 0) {
+			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+				if (FD_ISSET(m->pipes[i], &read_fds)) {
+                    // PRIMERO liberar el semáforo
+                    sem_post(&m->game_sync->player_can_move[i]);
+                    // LUEGO leer el movimiento
+                    check_player(m, i);
+                    break;
+                }
+			}
+		}
+
 
 	}
 

@@ -81,7 +81,7 @@ int main(void) {
         }
         
         // Elegir y enviar movimiento
-        unsigned char move = 0;
+        unsigned char move = 0; // 0 = arriba
         if (write(STDOUT_FILENO, &move, 1) != 1) {
             perror("write move");
             break;
