@@ -221,17 +221,57 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 		}
 	}
 
-	// Inicializar jugadores, sino estan en un estado inconsistente
-	for (unsigned int i = 0; i < gs->player_count; i++) {
-		// TODO: Hacer que empiecen en un lugar random
+		// Calcula un rectángulo central (60% del tablero, centrado)
+	int rect_w = (int)(gs->width * 0.6);
+	int rect_h = (int)(gs->height * 0.6);
+	int rect_x0 = (gs->width - rect_w) / 2;
+	int rect_y0 = (gs->height - rect_h) / 2;
 
-		 gs->players[i].score = 0;
-		 gs->players[i].invalid_reqs = 0;
-		 gs->players[i].valid_reqs = 0;
-		 gs->players[i].x = i;
-		 gs->players[i].y = i;
-		 gs->players[i].pid = -1;
-		 gs->players[i].blocked = 0;
+	// Calcula la cantidad de celdas del borde del rectángulo
+	int border_cells = 2 * (rect_w + rect_h) - 4;
+
+	// Guardar todas las posiciones del borde en un array
+	int border_x[border_cells];
+	int border_y[border_cells];
+	int idx = 0;
+
+	// Borde superior (izq a der)
+	for (int x = 0; x < rect_w; x++) {
+	    border_x[idx] = rect_x0 + x;
+	    border_y[idx++] = rect_y0;
+	}
+	// Borde derecho (arriba a abajo, sin repetir esquina)
+	for (int y = 1; y < rect_h - 1; y++) {
+	    border_x[idx] = rect_x0 + rect_w - 1;
+	    border_y[idx++] = rect_y0 + y;
+	}
+	// Borde inferior (der a izq)
+	for (int x = rect_w - 1; x >= 0; x--) {
+	    border_x[idx] = rect_x0 + x;
+	    border_y[idx++] = rect_y0 + rect_h - 1;
+	}
+	// Borde izquierdo (abajo a arriba, sin repetir esquina)
+	for (int y = rect_h - 2; y > 0; y--) {
+	    border_x[idx] = rect_x0;
+	    border_y[idx++] = rect_y0 + y;
+	}
+
+	// Ahora ubicamos a los jugadores equidistantes
+	for (unsigned int i = 0; i < gs->player_count; i++) {
+	    int pos = (i * border_cells) / gs->player_count;
+	    int px = border_x[pos];
+	    int py = border_y[pos];
+
+	    gs->players[i].score = 0;
+	    gs->players[i].invalid_reqs = 0;
+	    gs->players[i].valid_reqs = 0;
+	    gs->players[i].x = px;
+	    gs->players[i].y = py;
+	    gs->players[i].pid = -1;
+	    gs->players[i].blocked = 0;
+
+	    // Marcar la celda como ocupada por el jugador
+	    gs->board[py * gs->width + px] = -1 * (int)i;
 	}
 
 	return 0;
