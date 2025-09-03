@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "player_common.h"
 
 int main(void) {
 
@@ -52,41 +53,26 @@ int main(void) {
 	while (1) {
         // Esperar permiso para enviar movimiento
         sem_wait(&game_sync->player_can_move[id]);
-        
-		sem_wait(&game_sync->reader_count_mutex);
-
-        // Read game state
-		game_sync->reader_count++;
+       
+		reader_enter(game_sync);
 		
-		if (game_sync->reader_count == 1) {
-			sem_wait(&game_sync->master_mutex);
-		}
+        // Elegir y enviar movimiento 
+        unsigned char move = rand() % 7;
 
-		sem_post(&game_sync->reader_count_mutex);
-
-		sem_wait(&game_sync->state_mutex);
-		// Aquí leemos el estado (ya está mapeado en memoria)
-		sem_post(&game_sync->state_mutex);
-		
-		sem_wait(&game_sync->reader_count_mutex);
-		game_sync->reader_count--;
-		if (game_sync->reader_count == 0) {
-			sem_post(&game_sync->master_mutex);
-		}
-		sem_post(&game_sync->reader_count_mutex);
-
-        // Verificar si el juego terminó o si estamos bloqueados
+		// Verificar si el juego terminó o si estamos bloqueados
         if (game_state->finished || p->blocked) {
+		    reader_leave(game_sync);
             break;
         }
         
-        // Elegir y enviar movimiento
-        unsigned char move = rand() % 7;
         if (write(STDOUT_FILENO, &move, 1) != 1) {
             perror("write move");
             break;
         }
         
+		reader_leave(game_sync);
+
+ 
     }
  
     return 0;

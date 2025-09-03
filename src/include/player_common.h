@@ -4,8 +4,6 @@
 #include "common.h"
 #include <stdbool.h>
 
-
-
 bool is_valid_position(GameState *state, int x, int y);
 
 // Devuelve el valor de la celda en (x, y), o -1 si es inválida
@@ -27,5 +25,9 @@ bool has_nearby_players(GameState *state, int x, int y, int my_id);
 bool is_potential_trap(GameState *state, int x, int y);
 
 bool is_endgame(GameState *state);
+
+// Para la sincronizacion
+void reader_enter(GameSync* sync);
+void reader_leave(GameSync* sync);
 
 #endif // PLAYER_COMMON_H

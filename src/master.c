@@ -409,10 +409,14 @@ static int check_player(MasterADT m, int player_id) {
 	// TODO: Error check read bytes
 	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
 	
+	sem_wait(&m->game_sync->state_mutex);
+
 	// Guardar posiciones de inicio para luego modificarlas en la escritura al game state
 	// No pueden cambiar pues el master es el unico escritor, es seguro
 	unsigned short x = m->game_state->players[player_id].x;
 	unsigned short y = m->game_state->players[player_id].y;
+
+	sem_post(&m->game_sync->state_mutex);
 
 	switch(c) {
 		case 0:	// Arriba	
@@ -526,17 +530,15 @@ static int game_start(MasterADT m) {
 		} else if (ready > 0) {
 			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 
-				if (m->pipes[i] == -1)	// Ignorar
-					break;
+				if (m->pipes[i] == -1 || m->game_state->players[i].blocked)	// Ignorar
+					continue;
 
 				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
                     // LUEGO leer el movimiento
                     check_player(m, i);
-                    break;
                 } else {
 					// Esta bloqueado, actualizar data
 					pipe_set_blocked(m, i);
-
 				}
 
 			}

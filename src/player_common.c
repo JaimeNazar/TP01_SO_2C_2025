@@ -41,7 +41,6 @@ void direction_to_offset(unsigned char dir, int *dx, int *dy) {
     }
 }
 
-
 int count_free_neighbors(GameState *state, int x, int y) {
     int count = 0;
     for (unsigned char dir = 0; dir < 8; dir++) {
@@ -55,8 +54,6 @@ int count_free_neighbors(GameState *state, int x, int y) {
     }
     return count;
 }
-
-
 
 int calculate_depth(GameState *state, int start_x, int start_y, int dx, int dy, int max_depth) {
     int depth = 0;
@@ -110,9 +107,6 @@ bool is_potential_trap(GameState *state, int x, int y) {
     return free_neighbors == 0;
 }
 
-
-
-
 bool is_endgame(GameState *state) {
     int total_cells = state->width * state->height;
     int free_cells = 0;
@@ -125,3 +119,43 @@ bool is_endgame(GameState *state) {
 
     return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
 }
+
+void reader_enter(GameSync* sync) {
+	sem_wait(&sync->reader_count_mutex);
+
+	// Actualizar contador
+	sync->reader_count++;
+	
+	// Si soy el unico lector, verificar que el master no este escribiendo
+	if (sync->reader_count == 1) {
+		sem_wait(&sync->master_mutex);
+	}
+	
+	// Liberar variable
+	sem_post(&sync->reader_count_mutex);
+
+	// Esperar a que se pueda acceder
+	sem_wait(&sync->state_mutex);
+}
+
+void reader_leave(GameSync* sync) {
+
+	// Liberar game state
+	sem_post(&sync->state_mutex);
+	
+	// Actualizar variable
+	sem_wait(&sync->reader_count_mutex);
+	sync->reader_count--;
+
+	// Si nadie mas esta leyendo, notificar al master que puede escribir
+	if (sync->reader_count == 0) {
+		sem_post(&sync->master_mutex);
+	}
+	
+	// Liberar variable
+	sem_post(&sync->reader_count_mutex);
+}
+
+
+
+
