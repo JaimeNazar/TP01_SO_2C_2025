@@ -35,6 +35,8 @@ typedef struct {
 	GameSync *game_sync;
 	int game_state_fd, game_sync_fd;
 	int pipes[MAX_PLAYERS];		// fd de la salida de los pipes de cada jugador
+	int pipes_max_fd;
+	fd_set pipes_set;
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
@@ -164,7 +166,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 	return 0;
 }
 
-void esperar_delay(int delay_ms) {
+void wait_delay(int delay_ms) {
     struct timespec ts;
     ts.tv_sec  = delay_ms / 1000;
     ts.tv_nsec = (delay_ms % 1000) * 1000000L;
@@ -183,6 +185,8 @@ MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	m->delay = delay;
 	m->seed = seed;
 	m->timeout = timeout;
+	FD_ZERO(&m->pipes_set);
+	m->pipes_max_fd = -1;
 
 	return m;
 }
@@ -297,7 +301,7 @@ static int init_sync(MasterADT m) {
 	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
 
 	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
-		sem_init(&m->game_sync->player_can_move[i], 1, 0);
+		sem_init(&m->game_sync->player_can_move[i], 1, 1);
 	}
 
 	return 0;
@@ -354,7 +358,14 @@ static int init_childs(MasterADT m) {
 
 		// Si llegue aca estoy en master, configurar pipe
 		close(pipe_fd[1]); // Este no lo necesito
+		FD_SET(pipe_fd[0], &m->pipes_set);
+
 		m->pipes[i] = pipe_fd[0];
+
+		// Obtener el maximo para la llamada al select()
+		if (pipe_fd[0] > m->pipes_max_fd) {
+			m->pipes_max_fd = pipe_fd[0];
+		}
 	}
 
 	return 0;
@@ -397,15 +408,12 @@ static int check_player(MasterADT m, int player_id) {
 
 	// TODO: Error check read bytes
 	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
-	 
-	sem_wait(&m->game_sync->master_mutex);
-	sem_wait(&m->game_sync->state_mutex);	
-
-	// Guardar posiciones de inicio para luego modificarlas en el switch
+	
+	// Guardar posiciones de inicio para luego modificarlas en la escritura al game state
+	// No pueden cambiar pues el master es el unico escritor, es seguro
 	unsigned short x = m->game_state->players[player_id].x;
 	unsigned short y = m->game_state->players[player_id].y;
 
-	// TODO: Estos son los codigos de movimientos correctos?
 	switch(c) {
 		case 0:	// Arriba	
 			y--;	
@@ -448,29 +456,53 @@ static int check_player(MasterADT m, int player_id) {
 			break;
 	};
 
-	// Chequear si la nueva posicion es valida
-	if (x >= m->game_state->width || y >= m->game_state->height
-    || m->game_state->board[y*m->game_state->width + x] <= 0) {
+	// Alias para game state
+	GameState *gs = m->game_state;
 
-		m->game_state->players[player_id].invalid_reqs++;
+	// Entra escritor
+	sem_wait(&m->game_sync->master_mutex);
+	sem_wait(&m->game_sync->state_mutex);	
+	
+	// Chequear si la nueva posicion es valida
+	if (x >= gs->width || y >= gs->height
+    || gs->board[y*gs->width + x] <= 0) {
+
+		gs->players[player_id].invalid_reqs++;
 
 		// TODO: Verificar cuando queda bloqueado
 	} else {
-		m->game_state->players[player_id].valid_reqs++;
+		gs->players[player_id].valid_reqs++;
 
 		// Actualizar estado
-		m->game_state->players[player_id].x = x;
-		m->game_state->players[player_id].y = y;
+		gs->players[player_id].x = x;
+		gs->players[player_id].y = y;
+		gs->players[player_id].score += gs->board[y*gs->width + x];
 
-		m->game_state->board[y*m->game_state->width + x] = -1 * player_id;	
-	} 
+		gs->board[y*gs->width + x] = -1 * player_id;	
+	}
 
+	// Sale escritor	
 	sem_post(&m->game_sync->state_mutex);
 	sem_post(&m->game_sync->master_mutex);
-	
+
+	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
 
 	return 0;
+}
+
+static void pipe_set_blocked(MasterADT m, int id) {
+
+	m->pipes[id] = -1; // Marcarlo como invalido
+
+	// Buscar nuevo maximo
+	m->pipes_max_fd = -1;
+	
+	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+		if (m->pipes[i] > m->pipes_max_fd) {
+			m->pipes_max_fd = m->pipes[i];
+		}
+	}
 }
 
 static int game_start(MasterADT m) {
@@ -483,39 +515,30 @@ static int game_start(MasterADT m) {
 		sem_wait(&m->game_sync->render_done);
 
 		// Timeout para que sea mas humana la velocidad
-        esperar_delay(m->delay);
+        wait_delay(m->delay);
 
-		// Sincronizacion jugador
-		// TODO: Elegir los jugadores con select() y sin repetir el mismo jugador
-		// sem_post(&m->game_sync->player_can_move[0]);	
-		// check_player(m, 0);
-
-		int max_fd = -1;
-		fd_set read_fds;
-		FD_ZERO(&read_fds);
-
-		// recalculamos cada vez el maximo fd y seteamos read_fds
-		for (unsigned int i = 0; i < m->game_state->player_count; i++) {
-			FD_SET(m->pipes[i], &read_fds);
-			if (m->pipes[i] > max_fd) {
-				max_fd = m->pipes[i];
-			}
-		}
-
-		int ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+		// Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
+		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, NULL);
 
 		if (ready == -1) {
 			perror("MASTER::GAME_START: Error with select");
 			return -1;
 		} else if (ready > 0) {
 			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
-				if (FD_ISSET(m->pipes[i], &read_fds)) {
-                    // PRIMERO liberar el semáforo
-                    sem_post(&m->game_sync->player_can_move[i]);
+
+				if (m->pipes[i] == -1)	// Ignorar
+					break;
+
+				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
                     // LUEGO leer el movimiento
                     check_player(m, i);
                     break;
-                }
+                } else {
+					// Esta bloqueado, actualizar data
+					pipe_set_blocked(m, i);
+
+				}
+
 			}
 		}
 
