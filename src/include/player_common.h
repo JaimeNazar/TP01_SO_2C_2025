@@ -1,8 +1,34 @@
 #ifndef PLAYER_COMMON_H
 #define PLAYER_COMMON_H
 
+#include <fcntl.h>  
+#include <string.h>
+#include <time.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>  
+
 #include "common.h"
 #include <stdbool.h>
+
+typedef struct PlayerCDT* PlayerADT;
+
+// TODO: Documentar!!
+
+PlayerADT init_player(unsigned short width, unsigned short height);
+
+int init_shm(PlayerADT p);
+
+void get_state_snapshot(PlayerADT p);
+
+bool still_playing(PlayerADT p);
+
+int send_movement(PlayerADT p, unsigned char move);
+
+
+///// Commons
 
 bool is_valid_position(GameState *state, int x, int y);
 
@@ -27,7 +53,7 @@ bool is_potential_trap(GameState *state, int x, int y);
 bool is_endgame(GameState *state);
 
 // Para la sincronizacion
-void reader_enter(GameSync* sync);
-void reader_leave(GameSync* sync);
+void reader_enter(PlayerADT p);
+void reader_leave(PlayerADT p);
 
 #endif // PLAYER_COMMON_H

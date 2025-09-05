@@ -2,6 +2,97 @@
 #include "include/player_common.h"
 #include "include/common.h"
 
+struct PlayerCDT {
+	GameState* game_state;
+	GameSync* game_sync;
+	unsigned short x, y, width, height;
+	int id;								// Game state values
+	char blocked;
+	char game_finished;
+	int board[];	// Demasiado? Copiar todo el tablero?
+};
+
+PlayerADT init_player(unsigned short width, unsigned short height) {
+	PlayerADT p = malloc(sizeof(struct PlayerCDT) + sizeof(int) * width * height);
+	p->width = width;
+	p->height = height;
+	p->blocked = 0;
+	p->id = -1;
+
+	return p;
+}
+
+int init_shm(PlayerADT p) {
+
+	// Game state
+    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
+    if (fd == -1) {
+        perror("PLAYER::INIT_SHM: Error game state\n");
+		return -1;
+    }
+    p->game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0);
+																		   
+	// Game sync
+    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
+    if (fd == -1) {
+        perror("PLAYER::INIT_SHM: Error game sync\n");
+		return -1;
+    }
+
+    p->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+	return 0;
+}
+
+void get_state_snapshot(PlayerADT p) {
+
+	reader_enter(p);
+
+	// Chequear si conocemos nuestro id
+	if (p->id == -1) {
+
+		// Obtenerlo
+		pid_t my_pid = getpid();
+		for (unsigned int i = 0; p->id < 0 && i < p->game_state->player_count; i++) {
+			if (p->game_state->players[i].pid == my_pid) {
+				p->id = i;
+			}
+		}
+
+	}
+	
+	p->x = p->game_state->players[p->id].x;
+	p->y = p->game_state->players[p->id].y;
+	p->blocked = p->game_state->players[p->id].blocked;
+	p->game_finished = p->game_state->finished;
+	
+	// TODO: Usar memcpy
+	for (int i = 0; i < p->height; i++) {
+		for (int j = 0; i < p->width; j++) {
+			p->board[i*p->width + j] = p->game_state->board[i*p->width + j];
+		}
+	}
+
+	reader_leave(p);
+}
+
+bool still_playing(PlayerADT p) {
+	return p->game_finished || p->blocked;
+}
+
+int send_movement(PlayerADT p, unsigned char move) {
+    // Esperar permiso para enviar movimiento
+    sem_wait(&p->game_sync->player_can_move[p->id]);
+
+    if (write(STDOUT_FILENO, &move, 1) != 1) {
+        perror("PLAYER::SEND_MOVEMENT: Write error");
+            
+		return -1;
+    }
+
+	return 0;
+}
+
 bool is_valid_position(GameState *state, int x, int y) {
     return x >= 0 && x < state->width && y >= 0 && y < state->height;
 }
@@ -120,40 +211,41 @@ bool is_endgame(GameState *state) {
     return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
 }
 
-void reader_enter(GameSync* sync) {
-	sem_wait(&sync->reader_count_mutex);
+void reader_enter(PlayerADT p) {
+	sem_wait(&p->game_sync->reader_count_mutex);
 
 	// Actualizar contador
-	sync->reader_count++;
+	p->game_sync->reader_count++;
 	
 	// Si soy el unico lector, verificar que el master no este escribiendo
-	if (sync->reader_count == 1) {
-		sem_wait(&sync->master_mutex);
+	if (p->game_sync->reader_count == 1) {
+		sem_wait(&p->game_sync->master_mutex);
 	}
 	
 	// Liberar variable
-	sem_post(&sync->reader_count_mutex);
+	sem_post(&p->game_sync->reader_count_mutex);
 
 	// Esperar a que se pueda acceder
-	sem_wait(&sync->state_mutex);
+	sem_wait(&p->game_sync->state_mutex);
 }
 
-void reader_leave(GameSync* sync) {
+// NOTE: Esto tmb le sirve a la vista, mas tarde unificarlo en common.h
+void reader_leave(PlayerADT p) {
 
 	// Liberar game state
-	sem_post(&sync->state_mutex);
+	sem_post(&p->game_sync->state_mutex);
 	
 	// Actualizar variable
-	sem_wait(&sync->reader_count_mutex);
-	sync->reader_count--;
+	sem_wait(&p->game_sync->reader_count_mutex);
+	p->game_sync->reader_count--;
 
 	// Si nadie mas esta leyendo, notificar al master que puede escribir
-	if (sync->reader_count == 0) {
-		sem_post(&sync->master_mutex);
+	if (p->game_sync->reader_count == 0) {
+		sem_post(&p->game_sync->master_mutex);
 	}
 	
 	// Liberar variable
-	sem_post(&sync->reader_count_mutex);
+	sem_post(&p->game_sync->reader_count_mutex);
 }
 
 
