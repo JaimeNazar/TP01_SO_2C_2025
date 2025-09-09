@@ -5,7 +5,7 @@
 #include <sys/stat.h>  
 #include <sys/select.h>
 #include <fcntl.h>
-#include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -22,7 +22,7 @@
 #define DEFAULT_WIDTH 10
 #define DEFAULT_HEIGHT 10
 #define DEFAULT_DELAY 200
-#define DEFAULT_TIMEOUT 0
+#define DEFAULT_TIMEOUT 10
 #define MAX_PLAYERS 9
 #define MIN_PLAYERS 1
 
@@ -402,7 +402,7 @@ static int cleanup(MasterADT m) {
  * Procesa el estado de un jugador.
  * En caso de recibir un id invalido retorna 01.
  */
-static int check_player(MasterADT m, int player_id) {
+static bool check_player(MasterADT m, int player_id) {
 
 	char c = -1;	
 
@@ -466,13 +466,13 @@ static int check_player(MasterADT m, int player_id) {
 	// Entra escritor
 	sem_wait(&m->game_sync->master_mutex);
 	sem_wait(&m->game_sync->state_mutex);	
-	
+	bool is_invalid_move = false;
 	// Chequear si la nueva posicion es valida
 	if (x >= gs->width || y >= gs->height
     || gs->board[y*gs->width + x] <= 0) {
 
 		gs->players[player_id].invalid_reqs++;
-
+        is_invalid_move =true;
 		// TODO: Verificar cuando queda bloqueado
 	} else {
 		gs->players[player_id].valid_reqs++;
@@ -492,7 +492,7 @@ static int check_player(MasterADT m, int player_id) {
 	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
 
-	return 0;
+	return is_invalid_move;
 }
 
 static void pipe_set_blocked(MasterADT m, int id) {
@@ -509,7 +509,67 @@ static void pipe_set_blocked(MasterADT m, int id) {
 	}
 }
 
+static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
+static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
+
+
+//funcion que pregunta si todos los jugadores pueden moverse o no, lo hace chequeando todas las celdas adyacentes a los jugadores
+bool no_player_can_move(MasterADT m) {
+    const GameState *st = m->game_state;
+
+    for (size_t i = 0; i < st->player_count; i++) {
+        const Player *p = &st->players[i];
+
+        // bloqueado => cuenta como "sin movimientos", pasamos al siguiente
+        if (p->blocked) continue;
+
+        const int x = p->x, y = p->y;
+
+        // revisar las 8 adyacencias con salida temprana
+        for (int d = 0; d < 8; d++) {
+            const int nx = x + DX[d];
+            const int ny = y + DY[d];
+
+            if (nx < 0 || ny < 0 || nx >= st->width || ny >= st->height)
+                continue;
+
+            const int cell = st->board[ny * st->width + nx];
+            if (cell > 0) {
+                // hay al menos un movimiento posible → no terminar
+                return false;
+            }
+        }
+        // este jugador no tiene adyacentes libres; seguimos con el próximo
+    }
+
+    // nadie pudo moverse (o todos estaban bloqueados)
+    return true;
+}
+
+typedef struct {
+    time_t start;
+    unsigned int duration; // en segundos
+    bool active;
+} Timeout;
+
+void start_timeout(Timeout *t, unsigned int seconds) {
+    t->start = time(NULL);
+    t->duration = seconds;
+    t->active = true;
+}
+
+bool timeout_expired(Timeout *t) {
+    if (!t->active) return false; // no se inició
+    time_t now = time(NULL);
+    return (now - t->start) >= t->duration;
+}
+
+void stop_timeout(Timeout *t) {
+    t->active = false;
+}
+
 static int game_start(MasterADT m) {
+    Timeout t = {0, m->timeout, false};
 
 	while (!m->game_state->finished) {
 
@@ -518,16 +578,19 @@ static int game_start(MasterADT m) {
 
 		sem_wait(&m->game_sync->render_done);
 
-		// Timeout para que sea mas humana la velocidad
         wait_delay(m->delay);
-
 		// Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
 		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, NULL);
 
+        if(no_player_can_move(m) || timeout_expired(&t)) {
+            m->game_state->finished = 1;
+            continue;
+        }
+
 		if (ready == -1) {
-			perror("MASTER::GAME_START: Error with select");
-			return -1;
-		} else if (ready > 0) {
+            perror("MASTER::GAME_START: Error with select");
+            return -1;
+        } else if (ready >= 0) {
 			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 
 				if (m->pipes[i] == -1 || m->game_state->players[i].blocked)	// Ignorar
@@ -535,7 +598,9 @@ static int game_start(MasterADT m) {
 
 				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
                     // LUEGO leer el movimiento
-                    check_player(m, i);
+                    if(!check_player(m, i)){//si es valido
+                        start_timeout(&t, m->timeout);
+                    }
                 } else {
 					// Esta bloqueado, actualizar data
 					pipe_set_blocked(m, i);
@@ -544,12 +609,29 @@ static int game_start(MasterADT m) {
 			}
 		}
 
-
 	}
 
 	return 0;
 }
 
+void print_final_results(const MasterADT m) {
+    const GameState *st = m->game_state;
+
+    // limpiar pantalla
+    printf("\033[2J\033[H");
+
+    // Líneas simples, sin trucos
+    puts("View exited");  // puts agrega '\n' por sí mismo
+
+    for (unsigned i = 0; i < st->player_count; i++) {
+        const Player *p = &st->players[i];
+        // Usamos \r\n por si la TTY quedó sin traducción de NL
+        printf("Player %s (%u) with a score of %u / %u / %u\r\n",
+               p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
+    }
+
+    fflush(stdout);
+}
 
 
 int main (int argc, char *argv[]) {
@@ -593,8 +675,11 @@ int main (int argc, char *argv[]) {
 	// Main loop
 	game_start(m);	
 
-	// Una vez termino t odo , liberar recursos
-    cleanup(m);
     // todo : imprimir resultados
+    //limpiar pantalla y mostrar resultados
+    print_final_results(m);
+
+// Una vez termino t odo , liberar recursos
+    cleanup(m);
 	return 0;
 }
