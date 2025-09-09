@@ -85,7 +85,7 @@ int min_dist_to_rival(PlayerADT p, int x, int y) {
     reader_enter(p);
 
     int min_dist = INT_MAX;
-    for (unsigned int i = 0; i < get_player_count(p); i++) {
+    for (unsigned int i = 0; i < state->player_count; i++) {
         if ((int)i == get_id(p) || state->players[i].blocked) continue;
         int px = state->players[i].x;
         int py = state->players[i].y;
