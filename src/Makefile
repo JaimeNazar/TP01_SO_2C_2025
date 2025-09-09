@@ -11,7 +11,6 @@ view: view.c
 master: master.c
 	$(COMPILER) $< $(COMPILER_FLAGS) -o ../$@.out
 
-greedy_player: greedy_player.c
 dummy_player: dummy_player.c player_common.c
 	$(COMPILER) $^ $(COMPILER_FLAGS) -o ../$@.out
 

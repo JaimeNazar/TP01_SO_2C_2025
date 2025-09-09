@@ -27,13 +27,12 @@ PlayerADT init_player(int argc, char **argv) {
 	p->width = width;
 	p->height = height;
 	p->blocked = 0;
-
 	p->id = -1;
 
 	return p;
 }
 
-int init_shm(PlayerADT p) {
+int p_init_shm(PlayerADT p) {
 
 	// Game state
     int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
@@ -41,7 +40,7 @@ int init_shm(PlayerADT p) {
         perror("PLAYER::INIT_SHM: Error game state\n");
 		return -1;
     }
-    p->game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0);
+    p->game_state = mmap(0, sizeof(GameState) + sizeof(int) * p->width * p->height, PROT_READ, MAP_SHARED, fd, 0);
 																		   
 	// Game sync
     fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
@@ -52,14 +51,7 @@ int init_shm(PlayerADT p) {
 
     p->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-	return 0;
-}
-
-void get_state_snapshot(PlayerADT p) {
-
-	reader_enter(p);
-
-	// Chequear si conocemos nuestro id
+	// Chequear id de la game state
 	if (p->id == -1) {
 
 		// Obtenerlo
@@ -71,6 +63,51 @@ void get_state_snapshot(PlayerADT p) {
 		}
 
 	}
+
+	return 0;
+}
+
+// NOTE: Es un patron lightswitch, importante para entender que esta pasando
+void reader_enter(PlayerADT p) {
+	sem_wait(&p->game_sync->reader_count_mutex);
+	
+	// Si soy el unico lector, verificar que el master no este escribiendo
+	if (p->game_sync->reader_count == 0) {
+		sem_wait(&p->game_sync->master_mutex);  // Esperar al master; 'prender' la senal
+	}
+
+	// Actualizar contador
+    p->game_sync->reader_count++;
+	
+	// Liberar variable
+	sem_post(&p->game_sync->reader_count_mutex);
+
+	// Esperar a que se pueda acceder
+    sem_wait(&p->game_sync->state_mutex);
+}
+
+// NOTE: Esto tmb le sirve a la vista, mas tarde unificarlo en common.h
+void reader_leave(PlayerADT p) {
+
+	// Liberar game state
+	sem_post(&p->game_sync->state_mutex);
+	
+	// Actualizar variable
+	sem_wait(&p->game_sync->reader_count_mutex);
+	p->game_sync->reader_count--;
+
+	// Si nadie mas esta leyendo, notificar al master que puede escribir
+	if (p->game_sync->reader_count == 0) {
+		sem_post(&p->game_sync->master_mutex);
+	}
+
+	// Liberar variable
+	sem_post(&p->game_sync->reader_count_mutex);
+}
+
+void get_state_snapshot(PlayerADT p) {
+
+	reader_enter(p);
 	
 	p->x = p->game_state->players[p->id].x;
 	p->y = p->game_state->players[p->id].y;
@@ -79,7 +116,7 @@ void get_state_snapshot(PlayerADT p) {
 	
 	// TODO: Usar memcpy
 	for (int i = 0; i < p->height; i++) {
-		for (int j = 0; i < p->width; j++) {
+		for (int j = 0; j < p->width; j++) {
 			p->board[i*p->width + j] = p->game_state->board[i*p->width + j];
 		}
 	}
@@ -88,10 +125,49 @@ void get_state_snapshot(PlayerADT p) {
 }
 
 bool still_playing(PlayerADT p) {
-	return p->game_finished || p->blocked;
+	return !p->game_finished || !p->blocked;
+}
+
+int get_board_value(PlayerADT p, unsigned int x, unsigned int y) {
+	if (x >= p->width || y >= p->height) {
+        perror("PLAYER::GET_BOARD_VALUE: Out of bounds");
+        return -10;
+    }
+
+    return p->board[y*p->width + x];
+}
+
+unsigned int get_x(PlayerADT p) {
+    return p->x;
+}
+
+unsigned int get_y(PlayerADT p) {
+    return p->y;
+}
+
+unsigned int get_width(PlayerADT p) {
+    return p->width;
+}
+
+unsigned int get_height(PlayerADT p) {
+    return p->height;
+}
+
+int get_id(PlayerADT p) {
+    return p->id;
+}
+
+// NOTE: Evitar usar estas
+GameState* get_game_state(PlayerADT p) {
+    return p->game_state;
+}
+
+GameSync* get_game_sync(PlayerADT p) {
+    return p->game_sync;
 }
 
 int send_movement(PlayerADT p, unsigned char move) {
+
     // Esperar permiso para enviar movimiento
     sem_wait(&p->game_sync->player_can_move[p->id]);
 
@@ -104,19 +180,19 @@ int send_movement(PlayerADT p, unsigned char move) {
 	return 0;
 }
 
-bool is_valid_position(GameState *state, int x, int y) {
-    return x >= 0 && x < state->width && y >= 0 && y < state->height;
+bool is_valid_position(PlayerADT p, int x, int y) {
+    return x >= 0 && x < p->width && y >= 0 && y < p->height;
 }
 
-int get_board_cell(GameState *state, int x, int y) {
-    if (!is_valid_position(state, x, y)) {
+int get_board_cell(PlayerADT p, int x, int y) {
+    if (!is_valid_position(p, x, y)) {
         return -1; // Valor inválido para posiciones fuera del tablero
     }
-    return state->board[y * state->width + x];
+    return p->board[y * p->width + x];
 }
 
-bool is_cell_free(GameState *state, int x, int y) {
-    int cell_value = get_board_cell(state, x, y);
+bool is_cell_free(PlayerADT p, int x, int y) {
+    int cell_value = get_board_cell(p, x, y);
     return cell_value >= 1 && cell_value <= 9;
 }
 
@@ -143,26 +219,26 @@ void direction_to_offset(unsigned char dir, int *dx, int *dy) {
     }
 }
 
-int count_free_neighbors(GameState *state, int x, int y) {
+int count_free_neighbors(PlayerADT p, int x, int y) {
     int count = 0;
     for (unsigned char dir = 0; dir < 8; dir++) {
         int dx = 0, dy = 0;
         direction_to_offset(dir, &dx, &dy);
         int nx = x + dx;
         int ny = y + dy;
-        if (is_cell_free(state, nx, ny)) {
+        if (is_cell_free(p, nx, ny)) {
             count++;
         }
     }
     return count;
 }
 
-int calculate_depth(GameState *state, int start_x, int start_y, int dx, int dy, int max_depth) {
+int calculate_depth(PlayerADT p, int dx, int dy, int max_depth) {
     int depth = 0;
-    int x = start_x + dx;
-    int y = start_y + dy;
+    int x = p->x + dx;
+    int y = p->y + dy;
 
-    while (depth < max_depth && is_cell_free(state, x, y)) {
+    while (depth < max_depth && is_cell_free(p, x, y)) {
         depth++;
         x += dx;
         y += dy;
@@ -171,26 +247,32 @@ int calculate_depth(GameState *state, int start_x, int start_y, int dx, int dy, 
     return depth;
 }
 
-bool has_nearby_players(GameState *state, int x, int y, int my_id) {
-    for (int i = 0; (unsigned int) i < state->player_count; i++) {
-        if (i == my_id || state->players[i].blocked) continue;
+// NOTE: No se podria hacer leyendo los negativos del tablero?
+bool has_nearby_players(PlayerADT p, int x, int y, int my_id) {
+    
+    reader_enter(p);
+    for (int i = 0; (unsigned int) i < p->game_state->player_count; i++) {
+        if (i == my_id || p->game_state->players[i].blocked) continue;
 
-        int player_x = state->players[i].x;
-        int player_y = state->players[i].y;
+        int player_x = p->game_state->players[i].x;
+        int player_y = p->game_state->players[i].y;
 
         int dx = abs(x - player_x);
         int dy = abs(y - player_y);
 
         if (dx <= 2 && dy <= 2 && (dx + dy) <= 3) {
+            reader_leave(p);
             return true;
         }
 
     }
+
+    reader_leave(p);
     return false;
 }
 
-bool is_potential_trap(GameState *state, int x, int y) {
-    int free_neighbors = count_free_neighbors(state, x, y);
+bool is_potential_trap(PlayerADT p, int x, int y) {
+    int free_neighbors = count_free_neighbors(p, x, y);
 
     if (free_neighbors == 1) {
         for (unsigned char dir = 0; dir < 8; dir++) {
@@ -199,8 +281,8 @@ bool is_potential_trap(GameState *state, int x, int y) {
             int nx = x + dx;
             int ny = y + dy;
 
-            if (is_cell_free(state, nx, ny)) {
-                int next_neighbors = count_free_neighbors(state, nx, ny);
+            if (is_cell_free(p, nx, ny)) {
+                int next_neighbors = count_free_neighbors(p, nx, ny);
                 return next_neighbors <= 2;
             }
         }
@@ -209,12 +291,12 @@ bool is_potential_trap(GameState *state, int x, int y) {
     return free_neighbors == 0;
 }
 
-bool is_endgame(GameState *state) {
-    int total_cells = state->width * state->height;
+bool is_endgame(PlayerADT p) {
+    int total_cells = p->width * p->height;
     int free_cells = 0;
     
     for (int i = 0; i < total_cells; i++) {
-        if (state->board[i] >= 1 && state->board[i] <= 9) {
+        if (p->board[i] >= 1 && p->board[i] <= 9) {
             free_cells++;
         }
     }
@@ -222,42 +304,7 @@ bool is_endgame(GameState *state) {
     return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
 }
 
-void reader_enter(PlayerADT p) {
-	sem_wait(&p->game_sync->reader_count_mutex);
 
-	// Actualizar contador
-	p->game_sync->reader_count++;
-	
-	// Si soy el unico lector, verificar que el master no este escribiendo
-	if (p->game_sync->reader_count == 1) {
-		sem_wait(&p->game_sync->master_mutex);
-	}
-	
-	// Liberar variable
-	sem_post(&p->game_sync->reader_count_mutex);
-
-	// Esperar a que se pueda acceder
-	sem_wait(&p->game_sync->state_mutex);
-}
-
-// NOTE: Esto tmb le sirve a la vista, mas tarde unificarlo en common.h
-void reader_leave(PlayerADT p) {
-
-	// Liberar game state
-	sem_post(&p->game_sync->state_mutex);
-	
-	// Actualizar variable
-	sem_wait(&p->game_sync->reader_count_mutex);
-	p->game_sync->reader_count--;
-
-	// Si nadie mas esta leyendo, notificar al master que puede escribir
-	if (p->game_sync->reader_count == 0) {
-		sem_post(&p->game_sync->master_mutex);
-	}
-	
-	// Liberar variable
-	sem_post(&p->game_sync->reader_count_mutex);
-}
 
 
 

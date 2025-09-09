@@ -22,9 +22,9 @@
 
 
 // Flood fill para estimar el área de control desde (x, y)
-int flood_fill_area(GameState *state, int x, int y, bool *visited) {
+int flood_fill_area(PlayerADT p, int x, int y, bool *visited) {
     int area = 0;
-    int w = state->width, h = state->height;
+    int w = get_width(p), h = get_height(p);
     int stack_size = w * h;
     int *stack_x = malloc(stack_size * sizeof(int));
     int *stack_y = malloc(stack_size * sizeof(int));
@@ -41,7 +41,7 @@ int flood_fill_area(GameState *state, int x, int y, bool *visited) {
             int dx, dy;
             direction_to_offset(dir, &dx, &dy);
             int nx = cx + dx, ny = cy + dy;
-            if (is_cell_free(state, nx, ny) && !visited[ny * w + nx]) {
+            if (is_cell_free(p, nx, ny) && !visited[ny * w + nx]) {
                 visited[ny * w + nx] = true;
                 top++;
                 stack_x[top] = nx;
@@ -55,7 +55,11 @@ int flood_fill_area(GameState *state, int x, int y, bool *visited) {
 }
 
 // Devuelve true si un rival puede bloquear la celda (x, y) en 1 movimiento
-bool rival_can_block(GameState *state, int x, int y, int my_id) {
+bool rival_can_block(PlayerADT p, int x, int y, int my_id) {
+
+    GameState* state = get_game_state(p);
+    reader_enter(p);
+
     for (unsigned int i = 0; i < state->player_count; i++) {
         if ((int)i == my_id || state->players[i].blocked) continue;
         int px = state->players[i].x;
@@ -64,29 +68,38 @@ bool rival_can_block(GameState *state, int x, int y, int my_id) {
             int dx, dy;
             direction_to_offset(dir, &dx, &dy);
             if (px + dx == x && py + dy == y) {
+
+                reader_leave(p);
                 return true;
             }
         }
     }
+
+    reader_leave(p);
     return false;
 }
 
 // Calcula la distancia Manhattan al rival más cercano
-int min_dist_to_rival(GameState *state, int x, int y, int my_id) {
+int min_dist_to_rival(PlayerADT p, int x, int y) {
+    GameState* state = get_game_state(p);
+    reader_enter(p);
+
     int min_dist = INT_MAX;
-    for (unsigned int i = 0; i < state->player_count; i++) {
-        if ((int)i == my_id || state->players[i].blocked) continue;
+    for (unsigned int i = 0; i < get_player_count(p); i++) {
+        if ((int)i == get_id(p) || state->players[i].blocked) continue;
         int px = state->players[i].x;
         int py = state->players[i].y;
         int dist = abs(x - px) + abs(y - py);
         if (dist < min_dist) min_dist = dist;
     }
+
+    reader_leave(p);
     return min_dist == INT_MAX ? 0 : min_dist;
 }
 // Simula hasta 'depth' movimientos hacia adelante y retorna el puntaje máximo alcanzable desde (x, y)
-int simulate_future(Player *me, GameState *state, int x, int y, int depth, bool *visited) {
+int simulate_future(PlayerADT p, int x, int y, int depth, bool *visited) {
     if (depth == 0) {
-        int reward = get_board_cell(state, x, y);
+        int reward = get_board_cell(p, x, y);
         return reward;
     }
     int best = -1000000;
@@ -95,26 +108,30 @@ int simulate_future(Player *me, GameState *state, int x, int y, int depth, bool 
         direction_to_offset(dir, &dx, &dy);
         int nx = x + dx;
         int ny = y + dy;
-        if (is_cell_free(state, nx, ny) && !visited[ny * state->width + nx]) {
-            visited[ny * state->width + nx] = true;
-            int cell_value = get_board_cell(state, nx, ny);
-            int score = cell_value + simulate_future(me, state, nx, ny, depth - 1, visited);
+        if (is_cell_free(p, nx, ny) && !visited[ny * get_width(p) + nx]) {
+            visited[ny * get_width(p) + nx] = true;
+            int cell_value = get_board_cell(p, nx, ny);
+            int score = cell_value + simulate_future(p, nx, ny, depth - 1, visited);
             if (score > best) best = score;
-            visited[ny * state->width + nx] = false;
+            visited[ny * get_width(p) + nx] = false;
         }
     }
     if (best == -1000000) {
-        best = get_board_cell(state, x, y);
+        best = get_board_cell(p, x, y);
     }
     return best;
 }
 
 
-unsigned char choose_move(Player *me, GameState *state) {
-    bool endgame = is_endgame(state);
+unsigned char choose_move(PlayerADT p) {
+    bool endgame = is_endgame(p);
     unsigned char best_direction = 0;
     int best_score = -1000000;
     bool found_move = false;
+
+    // NOTE: Evitar usar asi los punteros
+    GameState* state = get_game_state(p);
+    reader_enter(p);
 
     int my_id = -1;
     pid_t my_pid = getpid();
@@ -125,45 +142,46 @@ unsigned char choose_move(Player *me, GameState *state) {
         }
     }
 
+    reader_leave(p);
 
-    int board_size = state->width * state->height;
+    int board_size = get_width(p) * get_height(p);
     bool *visited = calloc(board_size, sizeof(bool));
-    visited[me->y * state->width + me->x] = true;
+    visited[get_y(p) * get_width(p) + get_x(p)] = true;
 
     for (unsigned char dir = 0; dir < 8; dir++) {
         int dx = 0, dy = 0;
         direction_to_offset(dir, &dx, &dy);
 
-        int new_x = me->x + dx;
-        int new_y = me->y + dy;
+        int new_x = get_x(p) + dx;
+        int new_y = get_y(p) + dy;
 
-        if (is_cell_free(state, new_x, new_y)) {
-            visited[new_y * state->width + new_x] = true;
-            int lookahead_score = simulate_future(me, state, new_x, new_y, LOOKAHEAD_DEPTH - 1, visited);
-            visited[new_y * state->width + new_x] = false;
+        if (is_cell_free(p, new_x, new_y)) {
+            visited[new_y * get_width(p) + new_x] = true;
+            int lookahead_score = simulate_future(p, new_x, new_y, LOOKAHEAD_DEPTH - 1, visited);
+            visited[new_y * get_width(p) + new_x] = false;
 
-            int reward = get_board_cell(state, new_x, new_y);
-            int free_neighbors = count_free_neighbors(state, new_x, new_y);
+            int reward = get_board_cell(p, new_x, new_y);
+            int free_neighbors = count_free_neighbors(p, new_x, new_y);
 
             // Penalización fuerte si es dead end
             int dead_end_penalty = (free_neighbors == 0 ? 1 : 0);
 
-            int trap_penalty = is_potential_trap(state, new_x, new_y) ? 1 : 0;
+            int trap_penalty = is_potential_trap(p, new_x, new_y) ? 1 : 0;
 
-            int depth = calculate_depth(state, me->x, me->y, dx, dy, 4);
+            int depth = calculate_depth(p, dx, dy, 4);
 
-            int proximity_penalty = (my_id >= 0 && has_nearby_players(state, new_x, new_y, my_id)) ? 1 : 0;
+            int proximity_penalty = (my_id >= 0 && has_nearby_players(p, new_x, new_y, my_id)) ? 1 : 0;
 
         // 1. Penaliza si un rival puede bloquear esta celda en 1 movimiento
-        int rival_block_penalty = rival_can_block(state, new_x, new_y, my_id) ? 1 : 0;
+        int rival_block_penalty = rival_can_block(p, new_x, new_y, my_id) ? 1 : 0;
 
         // 2. Calcula área de control estimada desde la celda destino
         bool *ff_visited = calloc(board_size, sizeof(bool));
-        int area = flood_fill_area(state, new_x, new_y, ff_visited);
+        int area = flood_fill_area(p, new_x, new_y, ff_visited);
         free(ff_visited);
 
         // 3. Prefiere moverse lejos de rivales (aislamiento)
-        int dist_to_rival = min_dist_to_rival(state, new_x, new_y, my_id);
+        int dist_to_rival = min_dist_to_rival(p, new_x, new_y);
 
             int score = 0;
             if (endgame) {
@@ -198,80 +216,35 @@ unsigned char choose_move(Player *me, GameState *state) {
     free(visited);
 
     if (!found_move) {
-        me->blocked = true;
         return 0;
     }
 
     return best_direction;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
 
-    GameState *game_state = NULL;
-    GameSync *game_sync = NULL;
+    PlayerADT p = init_player(argc, argv);
 
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);
-    if (fd == -1) {
-        perror("Error SHM\n");
+    if (p == NULL)
+        return -1;
+
+    // TODO: Error handling
+    if(p_init_shm(p) == -1){
+        return -1;
     }
-
-    game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0);
-
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666);
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
-
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-    srand(time(NULL));
-    int id = -1;
-
-    pid_t my_pid = getpid();
-    for (unsigned int i = 0; id < 0 && i < game_state->player_count; i++) {
-        if (game_state->players[i].pid == my_pid) {
-            id = i;
-        }
-    }
-    if (id == -1) {
-        fprintf(stderr, "Could not find player ID\n");
-        return 1;
-    }
-
-    Player *p = &game_state->players[id];
 
     while (1) {
-        sem_wait(&game_sync->player_can_move[id]);
-
-        sem_wait(&game_sync->reader_count_mutex);
-
-        game_sync->reader_count++;
-
-        if (game_sync->reader_count == 1) {
-            sem_wait(&game_sync->master_mutex);
-        }
-
-        sem_post(&game_sync->reader_count_mutex);
-
-        sem_wait(&game_sync->state_mutex);
-        sem_post(&game_sync->state_mutex);
-
-        sem_wait(&game_sync->reader_count_mutex);
-        game_sync->reader_count--;
-        if (game_sync->reader_count == 0) {
-            sem_post(&game_sync->master_mutex);
-        }
-        sem_post(&game_sync->reader_count_mutex);
-
-        if (game_state->finished || p->blocked) {
+		// Verificar si el juego terminó o si estamos bloqueados
+        if (!still_playing(p)) {
             break;
         }
+        // Guardar estado actual
+        get_state_snapshot(p);
 
-        unsigned char move = choose_move(p, game_state);
-        if (write(STDOUT_FILENO, &move, 1) != 1) {
-            perror("write move");
-            break;
-        }
+        unsigned char move = choose_move(p);
+
+        send_movement(p, move);
 
     }
 
