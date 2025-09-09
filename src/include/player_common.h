@@ -17,7 +17,7 @@ typedef struct PlayerCDT* PlayerADT;
 
 // TODO: Documentar!!
 
-PlayerADT init_player(unsigned short width, unsigned short height);
+PlayerADT init_player(int argc, char **argv);
 
 int init_shm(PlayerADT p);
 

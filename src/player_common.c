@@ -12,11 +12,22 @@ struct PlayerCDT {
 	int board[];	// Demasiado? Copiar todo el tablero?
 };
 
-PlayerADT init_player(unsigned short width, unsigned short height) {
+PlayerADT init_player(int argc, char **argv) {
+
+    if (argc < 3) {
+        printf("Usage: ./player.out [width] [height]");
+
+        return NULL;
+    }
+
+    unsigned int width = atoi(argv[1]);
+    unsigned int height = atoi(argv[2]);
+
 	PlayerADT p = malloc(sizeof(struct PlayerCDT) + sizeof(int) * width * height);
 	p->width = width;
 	p->height = height;
 	p->blocked = 0;
+
 	p->id = -1;
 
 	return p;

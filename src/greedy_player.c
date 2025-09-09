@@ -43,72 +43,29 @@ unsigned char choose_move(Player *me, GameState *state) {
     return best_direction;
 }
 
+int main(int argc, char **argv) {
 
+    PlayerADT p = init_player(argc, argv);
 
-
-
-
-int main(void) {
-
-    GameState *game_state = NULL;
-    GameSync *game_sync = NULL;
-
-    // Shared memory
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
-
-    game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
-
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
-
-    game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-
-    //strcpy(player->name, "pepe");
-
-    srand(time(NULL));
-	int id = -1;
-
-	// Get player id
-	pid_t my_pid = getpid();
-    for (unsigned int i = 0; id < 0 && i < game_state->player_count; i++) {
-        if (game_state->players[i].pid == my_pid) {
-            id = i;
-        }
-    }
-    if (id == -1) {
-        fprintf(stderr, "Could not find player ID\n");
-        return 1;
-    }
-
-    Player *p = &game_state->players[id];
+    // TODO: Error handling
+    init_shm(p);
 
 	while (1) {
-        // Esperar permiso para enviar movimiento
-        sem_wait(&game_sync->player_can_move[id]);
+
+        // Guardar estado actual
+        get_state_snapshot(p);
+
+        send_movement(p, 3);
        
-		reader_enter(game_sync);
-		
         // Elegir y enviar movimiento
-        unsigned char move = choose_move(p, game_state);
+        //unsigned char move = choose_move(p, game_state);
 
 		// Verificar si el juego terminó o si estamos bloqueados
-        if (game_state->finished || p->blocked) {
-		    reader_leave(game_sync);
-            return -1;
-        }
+        // if (game_state->finished || p->blocked) {
+		//     reader_leave(game_sync);
+        //     return -1;
+        // }
         
-        if (write(STDOUT_FILENO, &move, 1) != 1) {
-            perror("write move");
-            break;
-        }
-        
-		reader_leave(game_sync);
 
     }
  

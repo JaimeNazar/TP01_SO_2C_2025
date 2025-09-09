@@ -3,17 +3,7 @@
 
 int main(int argc, char* argv[]) {
 
-    if (argc < 3) {
-        printf("Usage: ./player.out [width] [height]");
-
-        return -1;
-    }
-
-	
-    unsigned short width = atoi(argv[1]);
-    unsigned short height = atoi(argv[2]);	// TODO: Esto esta repetido tmb en la vista
-
-    PlayerADT p = init_player(width, height);
+    PlayerADT p = init_player(argc, argv);
 
     srand(time(NULL));
 
