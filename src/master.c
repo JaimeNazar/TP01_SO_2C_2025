@@ -175,7 +175,7 @@ void wait_delay(int delay_ms) {
 
 MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	
-	MasterADT m = calloc(0, sizeof(MasterCDT));
+	MasterADT m = calloc(1, sizeof(MasterCDT));
 
 	if (m == NULL) {
 		return NULL;
@@ -631,6 +631,24 @@ void print_final_results(const MasterADT m) {
     fflush(stdout);
 }
 
+void show_game_info(const MasterADT m) {
+	const GameState *st = m->game_state;
+	// limpiar pantalla
+	printf("\033[2J\033[H");
+
+	printf("width: %u\n", st->width);
+	printf("height: %u\n", st->height);
+	printf("delay: %d\n", m->delay);
+	printf("timeout: %d\n", m->timeout);
+	printf("seed: %d\n", m->seed);
+	printf("view: %s\n", m->view_path);
+	printf("num_players: %u\n", st->player_count);
+	for (unsigned i = 0; i < st->player_count; i++) {
+		printf("  %s\n", m->player_path[i]);
+	}
+	sleep(2); // Pausa para que el usuario pueda leer
+	fflush(stdout);
+}
 
 int main (int argc, char *argv[]) {
 
@@ -656,11 +674,14 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 
-		// Setup inicial
-	if (init_state(m, width, height, player_count) == -1)
+	// Setup inicial
+	if (init_state(m, width, height, player_count) == -1){
 		return -1;
+	}
 
 	init_sync(m);
+
+	show_game_info(m);
 
 	if (init_childs(m) == -1) {
 		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
@@ -668,16 +689,14 @@ int main (int argc, char *argv[]) {
 		cleanup(m);
 		return -1;
 	}
-	// TODO: Imprimir informacion del juego como el ejemplo
-	//
 	// Main loop
-	game_start(m);	
+	game_start(m);
 
-    // todo : imprimir resultados
-    //limpiar pantalla y mostrar resultados
-    print_final_results(m);
+	// todo : imprimir resultados
+	//limpiar pantalla y mostrar resultados
+	print_final_results(m);
 
 // Una vez termino t odo , liberar recursos
-    cleanup(m);
+	cleanup(m);
 	return 0;
 }
