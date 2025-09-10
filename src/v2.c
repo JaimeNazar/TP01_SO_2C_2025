@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "player_common.h"
+#include "playerADT.h"
 
 #define REWARD_WEIGHT 15
 #define FREE_NEIGHBORS_WEIGHT 3

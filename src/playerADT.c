@@ -1,6 +1,6 @@
-#include <stdlib.h>
-#include "include/player_common.h"
-#include "include/common.h"
+
+
+#include "playerADT.h"
 
 struct PlayerCDT {
 	GameState* game_state;
@@ -212,7 +212,7 @@ int calculate_depth(PlayerADT p, int dx, int dy, int max_depth) {
 // NOTE: No se podria hacer leyendo los negativos del tablero?
 bool has_nearby_players(PlayerADT p, int x, int y, int my_id) {
     
-    reader_enter(p);
+    reader_enter(p->game_sync);
     for (int i = 0; (unsigned int) i < p->game_state->player_count; i++) {
         if (i == my_id || p->game_state->players[i].blocked) continue;
 
@@ -223,13 +223,13 @@ bool has_nearby_players(PlayerADT p, int x, int y, int my_id) {
         int dy = abs(y - player_y);
 
         if (dx <= 2 && dy <= 2 && (dx + dy) <= 3) {
-            reader_leave(p);
+            reader_leave(p->game_sync);
             return true;
         }
 
     }
 
-    reader_leave(p);
+    reader_leave(p->game_sync);
     return false;
 }
 

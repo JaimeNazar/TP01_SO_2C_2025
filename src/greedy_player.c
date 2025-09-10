@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #include "common.h"
-#include "player_common.h"
+#include "playerADT.h"
 
 unsigned char choose_move(PlayerADT p) {
     

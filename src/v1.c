@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "player_common.h"
+#include "playerADT.h"
 #include <limits.h>
 
 #define REWARD_WEIGHT 15
@@ -57,8 +57,9 @@ int flood_fill_area(PlayerADT p, int x, int y, bool *visited) {
 // Devuelve true si un rival puede bloquear la celda (x, y) en 1 movimiento
 bool rival_can_block(PlayerADT p, int x, int y, int my_id) {
 
+    GameSync* sync = get_game_sync(p);
     GameState* state = get_game_state(p);
-    reader_enter(p);
+    reader_enter(sync);
 
     for (unsigned int i = 0; i < state->player_count; i++) {
         if ((int)i == my_id || state->players[i].blocked) continue;
@@ -69,20 +70,21 @@ bool rival_can_block(PlayerADT p, int x, int y, int my_id) {
             direction_to_offset(dir, &dx, &dy);
             if (px + dx == x && py + dy == y) {
 
-                reader_leave(p);
+                reader_leave(sync);
                 return true;
             }
         }
     }
 
-    reader_leave(p);
+    reader_leave(sync);
     return false;
 }
 
 // Calcula la distancia Manhattan al rival más cercano
 int min_dist_to_rival(PlayerADT p, int x, int y) {
+    GameSync* sync = get_game_sync(p);
     GameState* state = get_game_state(p);
-    reader_enter(p);
+    reader_enter(sync);
 
     int min_dist = INT_MAX;
     for (unsigned int i = 0; i < state->player_count; i++) {
@@ -93,7 +95,7 @@ int min_dist_to_rival(PlayerADT p, int x, int y) {
         if (dist < min_dist) min_dist = dist;
     }
 
-    reader_leave(p);
+    reader_leave(sync);
     return min_dist == INT_MAX ? 0 : min_dist;
 }
 // Simula hasta 'depth' movimientos hacia adelante y retorna el puntaje máximo alcanzable desde (x, y)
@@ -130,8 +132,9 @@ unsigned char choose_move(PlayerADT p) {
     bool found_move = false;
 
     // NOTE: Evitar usar asi los punteros
+    GameSync* sync = get_game_sync(p);
     GameState* state = get_game_state(p);
-    reader_enter(p);
+    reader_enter(sync);
 
     int my_id = -1;
     pid_t my_pid = getpid();
@@ -142,7 +145,7 @@ unsigned char choose_move(PlayerADT p) {
         }
     }
 
-    reader_leave(p);
+    reader_leave(sync);
 
     int board_size = get_width(p) * get_height(p);
     bool *visited = calloc(board_size, sizeof(bool));

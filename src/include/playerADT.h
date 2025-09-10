@@ -1,5 +1,5 @@
-#ifndef PLAYER_COMMON_H
-#define PLAYER_COMMON_H
+#ifndef PLAYER_ADT_H
+#define PLAYER_ADT_H
 
 #include <fcntl.h>  
 #include <string.h>
@@ -9,9 +9,10 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>  
+#include <stdlib.h>
+#include <stdbool.h>
 
 #include "common.h"
-#include <stdbool.h>
 
 typedef struct PlayerCDT* PlayerADT;
 
@@ -66,8 +67,4 @@ bool is_potential_trap(PlayerADT p, int x, int y);
 
 bool is_endgame(PlayerADT p);
 
-// Para la sincronizacion
-void reader_enter(PlayerADT p);
-void reader_leave(PlayerADT p);
-
-#endif // PLAYER_COMMON_H
+#endif // PLAYER_ADT_H
