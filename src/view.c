@@ -22,6 +22,7 @@
 #define PLAYER_PAIR_BASE 10 // Base para los colores de jugadores
 #define TABLE_WIDTH 55
 #define AUX_HEIGHT 5
+#define FRAME 2
 
 typedef struct {
     WINDOW *window;
@@ -48,7 +49,8 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin(v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); // TABLE_WIDTH columnas extra para info 
+                                                                                                                        // y FRAME para el marco
     
     // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
 
@@ -63,19 +65,28 @@ void view_init_ncurses(viewADT v) {
 
     // Color setup
     start_color();
-    init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_GREEN);
-    init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLUE);
-    init_pair(MOUNTAIN_PAIR, COLOR_BLACK, COLOR_WHITE);
-    // Colores para jugadores
-    init_pair(PLAYER_PAIR_BASE + 0, COLOR_WHITE, COLOR_RED);      // Jugador 1
-    init_pair(PLAYER_PAIR_BASE + 1, COLOR_WHITE, COLOR_GREEN);    // Jugador 2
-    init_pair(PLAYER_PAIR_BASE + 2, COLOR_WHITE, COLOR_YELLOW);   // Jugador 3
-    init_pair(PLAYER_PAIR_BASE + 3, COLOR_WHITE, COLOR_BLUE);     // Jugador 4
-    init_pair(PLAYER_PAIR_BASE + 4, COLOR_WHITE, COLOR_MAGENTA);  // Jugador 5
-    init_pair(PLAYER_PAIR_BASE + 5, COLOR_WHITE, COLOR_CYAN);     // Jugador 6
+    // Colores para jugadores (más oscuros)
+    init_pair(PLAYER_PAIR_BASE + 0, COLOR_BLACK, COLOR_RED);      // Jugador 1
+    init_pair(PLAYER_PAIR_BASE + 1, COLOR_BLACK, COLOR_GREEN);    // Jugador 2
+    init_pair(PLAYER_PAIR_BASE + 2, COLOR_BLACK, COLOR_YELLOW);   // Jugador 3
+    init_pair(PLAYER_PAIR_BASE + 3, COLOR_BLACK, COLOR_BLUE);     // Jugador 4
+    init_pair(PLAYER_PAIR_BASE + 4, COLOR_BLACK, COLOR_MAGENTA);  // Jugador 5
+    init_pair(PLAYER_PAIR_BASE + 5, COLOR_BLACK, COLOR_CYAN);     // Jugador 6
     init_pair(PLAYER_PAIR_BASE + 6, COLOR_BLACK, COLOR_WHITE);    // Jugador 7
     init_pair(PLAYER_PAIR_BASE + 7, COLOR_BLACK, COLOR_YELLOW);   // Jugador 8
     init_pair(PLAYER_PAIR_BASE + 8, COLOR_BLACK, COLOR_GREEN);    // Jugador 9
+    init_pair(PLAYER_PAIR_BASE + 9, COLOR_BLACK, COLOR_BLUE);     // Jugador 10
+    // Colores para paths (más claros)
+    init_pair(PLAYER_PAIR_BASE + 20 + 0, COLOR_WHITE, COLOR_RED);      // Path Jugador 1
+    init_pair(PLAYER_PAIR_BASE + 20 + 1, COLOR_WHITE, COLOR_GREEN);    // Path Jugador 2
+    init_pair(PLAYER_PAIR_BASE + 20 + 2, COLOR_WHITE, COLOR_YELLOW);   // Path Jugador 3
+    init_pair(PLAYER_PAIR_BASE + 20 + 3, COLOR_WHITE, COLOR_BLUE);     // Path Jugador 4
+    init_pair(PLAYER_PAIR_BASE + 20 + 4, COLOR_WHITE, COLOR_MAGENTA);  // Path Jugador 5
+    init_pair(PLAYER_PAIR_BASE + 20 + 5, COLOR_WHITE, COLOR_CYAN);     // Path Jugador 6
+    init_pair(PLAYER_PAIR_BASE + 20 + 6, COLOR_WHITE, COLOR_WHITE);    // Path Jugador 7
+    init_pair(PLAYER_PAIR_BASE + 20 + 7, COLOR_WHITE, COLOR_YELLOW);   // Path Jugador 8
+    init_pair(PLAYER_PAIR_BASE + 20 + 8, COLOR_WHITE, COLOR_GREEN);    // Path Jugador 9
+    init_pair(PLAYER_PAIR_BASE + 20 + 9, COLOR_WHITE, COLOR_BLUE);     // Path Jugador 10
 }
 
 // TODO: Agregar como libreria
@@ -161,9 +172,9 @@ void view_render(viewADT v) {
                 mvwaddch(v->window, i + 1, j + 1, 'A' + player_idx);
                 wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
             } else if (is_trail) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
                 mvwaddch(v->window, i + 1, j + 1, 'A' + trail_player);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + trail_player % 6));
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
             } else {
                 mvwaddch(v->window, i + 1, j + 1, '0' + (value % 10));
             }
