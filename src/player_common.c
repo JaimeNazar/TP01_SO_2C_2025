@@ -67,47 +67,9 @@ int p_init_shm(PlayerADT p) {
 	return 0;
 }
 
-// NOTE: Es un patron lightswitch, importante para entender que esta pasando
-void reader_enter(PlayerADT p) {
-	sem_wait(&p->game_sync->reader_count_mutex);
-	
-	// Si soy el unico lector, verificar que el master no este escribiendo
-	if (p->game_sync->reader_count == 0) {
-		sem_wait(&p->game_sync->master_mutex);  // Esperar al master; 'prender' la senal
-	}
-
-	// Actualizar contador
-    p->game_sync->reader_count++;
-	
-	// Liberar variable
-	sem_post(&p->game_sync->reader_count_mutex);
-
-	// Esperar a que se pueda acceder
-    sem_wait(&p->game_sync->state_mutex);
-}
-
-// NOTE: Esto tmb le sirve a la vista, mas tarde unificarlo en common.h
-void reader_leave(PlayerADT p) {
-
-	// Liberar game state
-	sem_post(&p->game_sync->state_mutex);
-	
-	// Actualizar variable
-	sem_wait(&p->game_sync->reader_count_mutex);
-	p->game_sync->reader_count--;
-
-	// Si nadie mas esta leyendo, notificar al master que puede escribir
-	if (p->game_sync->reader_count == 0) {
-		sem_post(&p->game_sync->master_mutex);
-	}
-
-	// Liberar variable
-	sem_post(&p->game_sync->reader_count_mutex);
-}
-
 void get_state_snapshot(PlayerADT p) {
 
-	reader_enter(p);
+	reader_enter(p->game_sync);
 	
 	p->x = p->game_state->players[p->id].x;
 	p->y = p->game_state->players[p->id].y;
@@ -121,7 +83,7 @@ void get_state_snapshot(PlayerADT p) {
 		}
 	}
 
-	reader_leave(p);
+	reader_leave(p->game_sync);
 }
 
 bool still_playing(PlayerADT p) {

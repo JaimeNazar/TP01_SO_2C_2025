@@ -43,4 +43,10 @@ typedef struct {
     sem_t player_can_move[9];		// Le indican a cada jugador que puede enviar 1 movimiento
 } GameSync;
 
+void writer_enter(GameSync* sync);
+void writer_leave(GameSync* sync);
+
+void reader_enter(GameSync* sync);
+void reader_leave(GameSync* sync);
+
 #endif // COMMON_H

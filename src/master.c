@@ -173,7 +173,6 @@ void wait_delay(int delay_ms) {
     nanosleep(&ts, NULL);  //usamos nanoslepp pues usleep no funciona
 }
 
-
 MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	
 	MasterADT m = calloc(0, sizeof(MasterCDT));
@@ -409,14 +408,14 @@ static bool check_player(MasterADT m, int player_id) {
 	// TODO: Error check read bytes
 	read(m->pipes[player_id], &c, 1);	// Recibir movimiento del pipe del jugador
 	
-	sem_wait(&m->game_sync->state_mutex);
+	reader_enter(m->game_sync);
 
 	// Guardar posiciones de inicio para luego modificarlas en la escritura al game state
 	// No pueden cambiar pues el master es el unico escritor, es seguro
 	unsigned short x = m->game_state->players[player_id].x;
 	unsigned short y = m->game_state->players[player_id].y;
 
-	sem_post(&m->game_sync->state_mutex);
+	reader_leave(m->game_sync);
 
 	switch(c) {
 		case 0:	// Arriba	
@@ -464,8 +463,8 @@ static bool check_player(MasterADT m, int player_id) {
 	GameState *gs = m->game_state;
 
 	// Entra escritor
-	sem_wait(&m->game_sync->master_mutex);
-	sem_wait(&m->game_sync->state_mutex);	
+	writer_enter(m->game_sync);
+
 	bool is_invalid_move = false;
 	// Chequear si la nueva posicion es valida
 	if (x >= gs->width || y >= gs->height
@@ -486,8 +485,7 @@ static bool check_player(MasterADT m, int player_id) {
 	}
 
 	// Sale escritor	
-	sem_post(&m->game_sync->state_mutex);
-	sem_post(&m->game_sync->master_mutex);
+	writer_leave(m->game_sync);
 
 	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
@@ -512,8 +510,8 @@ static void pipe_set_blocked(MasterADT m, int id) {
 static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
 static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
 
-
-//funcion que pregunta si todos los jugadores pueden moverse o no, lo hace chequeando todas las celdas adyacentes a los jugadores
+// TODO: WTF, solo chequea si blocked = true
+// Funcion que pregunta si todos los jugadores pueden moverse o no, lo hace chequeando todas las celdas adyacentes a los jugadores
 bool no_player_can_move(MasterADT m) {
     const GameState *st = m->game_state;
 
