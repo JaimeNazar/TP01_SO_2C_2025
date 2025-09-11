@@ -394,6 +394,9 @@ static int cleanup(MasterADT m) {
 
 	free(m);
 
+	system("stty sane");
+
+
 	return 0;
 }
 
@@ -627,11 +630,7 @@ void print_final_results(const MasterADT m) {
         printf("Player %s (%u) with a score of %u / %u / %u\r\n",
                p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
     }
-
     fflush(stdout);
-
-	// Restaurar la terminal a un estado "sano" por si algún hijo la dejó rota
-	system("stty sane");
 }
 
 void show_game_info(const MasterADT m) {
