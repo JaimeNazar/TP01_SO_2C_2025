@@ -567,30 +567,10 @@ bool no_player_can_move(MasterADT m) {
     return true;
 }
 
-typedef struct {
-    time_t start;
-    unsigned int duration; // en segundos
-    bool active;
-} Timeout;
-
-void start_timeout(Timeout *t, unsigned int seconds) {
-    t->start = time(NULL);
-    t->duration = seconds;
-    t->active = true;
-}
-
-bool timeout_expired(Timeout *t) {
-    if (!t->active) return false; // no se inició
-    time_t now = time(NULL);
-    return (now - t->start) >= t->duration;
-}
-
-void stop_timeout(Timeout *t) {
-    t->active = false;
-}
-
 static int game_start(MasterADT m) {
-    Timeout t = {0, m->timeout, false};
+
+    struct timeval tv = {m->timeout, 0};
+    time_t last_time = time(NULL);
 
 	while (!m->game_state->finished) {
 
@@ -600,18 +580,24 @@ static int game_start(MasterADT m) {
 		sem_wait(&m->game_sync->render_done);
 
         wait_delay(m->delay);
-		// Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
-		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, NULL);
 
-        if(no_player_can_move(m) || timeout_expired(&t)) {
+        if(no_player_can_move(m)) {
             m->game_state->finished = 1;
             continue;
         }
 
+        int elapsed = (int)difftime(time(NULL), last_time);
+        tv.tv_sec = m->timeout - elapsed;
+
+        // Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
+		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, &tv);
+
 		if (ready == -1) {
             perror("MASTER::GAME_START: Error with select");
             return -1;
-        } else if (ready >= 0) {
+        } else if (ready == 0) {
+                m->game_state->finished = 1;
+        } else if (ready > 0) {
 			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 
 				if (m->pipes[i] == -1 || m->game_state->players[i].blocked)	// Ignorar
@@ -620,7 +606,7 @@ static int game_start(MasterADT m) {
 				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
                     // LUEGO leer el movimiento
                     if(!check_player(m, i)){//si es valido
-                        start_timeout(&t, m->timeout);
+                       last_time = time(NULL); // resetear timeout
                     }
                 } else {
 					// Esta bloqueado, actualizar data
@@ -691,7 +677,7 @@ int main (int argc, char *argv[]) {
 
 	// Procesar argumentos
 	if (parse_args(m, argc, argv, &width, &height, &player_count)) {
-		printf("Usage: ./ChompChamps [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
+		printf("Usage: ./master.out [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
 
 		cleanup(m);
 		return -1;
