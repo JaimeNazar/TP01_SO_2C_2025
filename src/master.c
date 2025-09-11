@@ -394,10 +394,45 @@ static int cleanup(MasterADT m) {
 
 	free(m);
 
-	system("stty sane");
-
-
 	return 0;
+}
+
+static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
+static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
+
+/*
+ * Verifica si un jugador esta bloqueado, devuelve verdadero si lo esta
+*/
+static bool is_blocked(MasterADT m, int player_id) {
+
+	GameState *gs = m->game_state;
+
+	reader_enter(m->game_sync);
+
+	// Chequear si esta bloqueado
+	const Player *p = &gs->players[player_id];
+
+    const int x = p->x, y = p->y;
+
+    // Revisar las 8 adyacencias
+    for (int d = 0; d < 8; d++) {
+        const int nx = x + DX[d];
+        const int ny = y + DY[d];
+
+        if (nx < 0 || ny < 0 || nx >= gs->width || ny >= gs->height)
+            continue;
+
+        const int cell = gs->board[ny * gs->width + nx];
+        if (cell > 0) {
+			reader_leave(m->game_sync);
+            return false;
+        }
+    }
+
+	reader_leave(m->game_sync);
+
+	return true;
+
 }
 
 /*
@@ -469,13 +504,13 @@ static bool check_player(MasterADT m, int player_id) {
 	writer_enter(m->game_sync);
 
 	bool is_invalid_move = false;
+
 	// Chequear si la nueva posicion es valida
 	if (x >= gs->width || y >= gs->height
     || gs->board[y*gs->width + x] <= 0) {
 
 		gs->players[player_id].invalid_reqs++;
-        is_invalid_move =true;
-		// TODO: Verificar cuando queda bloqueado
+        is_invalid_move = true;
 	} else {
 		gs->players[player_id].valid_reqs++;
 
@@ -486,9 +521,12 @@ static bool check_player(MasterADT m, int player_id) {
 
 		gs->board[y*gs->width + x] = -1 * player_id;	
 	}
-
+	
 	// Sale escritor	
 	writer_leave(m->game_sync);
+
+	if (is_blocked(m, player_id))
+		gs->players[player_id].blocked = true;
 
 	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
@@ -510,40 +548,22 @@ static void pipe_set_blocked(MasterADT m, int id) {
 	}
 }
 
-static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
-static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
-
-// TODO: WTF, solo chequea si blocked = true
-// Funcion que pregunta si todos los jugadores pueden moverse o no, lo hace chequeando todas las celdas adyacentes a los jugadores
+// Funcion que pregunta si todos los jugadores pueden moverse o no
 bool no_player_can_move(MasterADT m) {
-    const GameState *st = m->game_state;
+    const GameState *gs = m->game_state;
 
-    for (size_t i = 0; i < st->player_count; i++) {
-        const Player *p = &st->players[i];
+	reader_enter(m->game_sync);
 
-        // bloqueado => cuenta como "sin movimientos", pasamos al siguiente
-        if (p->blocked) continue;
-
-        const int x = p->x, y = p->y;
-
-        // revisar las 8 adyacencias con salida temprana
-        for (int d = 0; d < 8; d++) {
-            const int nx = x + DX[d];
-            const int ny = y + DY[d];
-
-            if (nx < 0 || ny < 0 || nx >= st->width || ny >= st->height)
-                continue;
-
-            const int cell = st->board[ny * st->width + nx];
-            if (cell > 0) {
-                // hay al menos un movimiento posible → no terminar
-                return false;
-            }
-        }
-        // este jugador no tiene adyacentes libres; seguimos con el próximo
+    for (size_t i = 0; i < gs->player_count; i++) {
+        if (!gs->players[i].blocked){
+			reader_leave(m->game_sync);
+			return false;
+		}
     }
 
-    // nadie pudo moverse (o todos estaban bloqueados)
+	reader_leave(m->game_sync);
+
+    // Nadie pudo moverse (o todos estaban bloqueados)
     return true;
 }
 
@@ -621,7 +641,6 @@ void print_final_results(const MasterADT m) {
     // limpiar pantalla
     printf("\033[2J\033[H");
 
-    // Líneas simples, sin trucos
     puts("View exited");  // puts agrega '\n' por sí mismo
 
     for (unsigned i = 0; i < st->player_count; i++) {
@@ -630,10 +649,12 @@ void print_final_results(const MasterADT m) {
         printf("Player %s (%u) with a score of %u / %u / %u\r\n",
                p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
     }
+
+	
     fflush(stdout);
 }
 
-void show_game_info(const MasterADT m) {
+static void show_game_info(const MasterADT m) {
 	const GameState *st = m->game_state;
 	// limpiar pantalla
 	printf("\033[2J\033[H");
@@ -697,7 +718,7 @@ int main (int argc, char *argv[]) {
 	//limpiar pantalla y mostrar resultados
 	print_final_results(m);
 
-// Una vez termino t odo , liberar recursos
+	// Una vez termino todo, liberar recursos
 	cleanup(m);
 	return 0;
 }

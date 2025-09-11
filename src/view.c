@@ -27,6 +27,7 @@
 typedef struct {
     WINDOW *window;
     int width, height;
+    char finished;
 
     GameState *game_state;
     GameSync *game_sync;
@@ -111,6 +112,8 @@ void view_init_shm(viewADT v) {
 }
 
 void view_cleanup(viewADT v) {
+
+    while(1){}
     clrtoeol();
 	wrefresh(v->window);
 
@@ -118,6 +121,8 @@ void view_cleanup(viewADT v) {
         delwin(v->window);
         v->window = NULL;
     }
+
+	system("stty sane"); // NO LO EJECUTA
 
 	endwin();   // Deallocate memory and end ncurses
 }
@@ -184,6 +189,14 @@ void view_render(viewADT v) {
     wrefresh(v->window);
 }
 
+static void view_update(viewADT v) {
+    reader_enter(v->game_sync);
+
+    v->finished = v->game_state->finished;
+
+    reader_leave(v->game_sync);
+}
+
 int main(int argc, char **argv) {
 
     if (argc < 3) {
@@ -197,15 +210,18 @@ int main(int argc, char **argv) {
 
     v.width = atoi(argv[1]);
     v.height = atoi(argv[2]);
+    v.finished = 0;
 
     view_init_ncurses(&v);
     view_init_shm(&v);
 
     // Main loop
 
-    while(!v.game_state->finished) {
+    while(!v.finished) {
         // Wait on semaphore
         sem_wait(&(v.game_sync->state_change));
+
+        view_update(&v);
 
         view_render(&v);
 
