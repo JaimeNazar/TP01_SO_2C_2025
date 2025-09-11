@@ -629,6 +629,9 @@ void print_final_results(const MasterADT m) {
     }
 
     fflush(stdout);
+
+	// Restaurar la terminal a un estado "sano" por si algún hijo la dejó rota
+	system("stty sane");
 }
 
 void show_game_info(const MasterADT m) {
@@ -692,7 +695,6 @@ int main (int argc, char *argv[]) {
 	// Main loop
 	game_start(m);
 
-	// todo : imprimir resultados
 	//limpiar pantalla y mostrar resultados
 	print_final_results(m);
 
