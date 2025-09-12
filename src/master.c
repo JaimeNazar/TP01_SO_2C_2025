@@ -33,6 +33,7 @@ typedef struct {
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
 	GameState *game_state;
 	GameSync *game_sync;
+	unsigned int player_count;	// Conviene guardar una copia ya que no va a cambiar mucho
 	int game_state_fd, game_sync_fd;
 	int pipes[MAX_PLAYERS];		// fd de la salida de los pipes de cada jugador
 	int pipes_max_fd;
@@ -184,6 +185,7 @@ MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	m->delay = delay;
 	m->seed = seed;
 	m->timeout = timeout;
+	m->player_count = 0;
 	FD_ZERO(&m->pipes_set);
 	m->pipes_max_fd = -1;
 
@@ -212,6 +214,7 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	gs->width = width;
 	gs->height = height;
 	gs->player_count = player_count;
+	m->player_count = player_count;	// Tmb guardar copia en el master, para evitar entrar en state todo el tiempo
 
 	// Llenar el tablero
 	srand(m->seed);
@@ -224,7 +227,7 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 		}
 	}
 
-		// Calcula un rectángulo central (60% del tablero, centrado)
+	// Calcula un rectángulo central (60% del tablero, centrado)
 	int rect_w = (int)(gs->width * 0.6);
 	int rect_h = (int)(gs->height * 0.6);
 	int rect_x0 = (gs->width - rect_w) / 2;
@@ -299,7 +302,7 @@ static int init_sync(MasterADT m) {
 	sem_init(&m->game_sync->state_mutex, 1, 1);
 	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
 
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		sem_init(&m->game_sync->player_can_move[i], 1, 1);
 	}
 
@@ -316,8 +319,10 @@ static int init_childs(MasterADT m) {
 
 	char* argv[] = {m->view_path, arg1, arg2, NULL}; // Debe terminar en un puntero a NULL
 	
+	reader_enter(m->game_sync);
 	sprintf(arg1, "%d", gs->width);
 	sprintf(arg2, "%d", gs->height);
+	reader_leave(m->game_sync);
 
 	// Primero la vista(antes del pipe)
 	int view_pid = fork();
@@ -331,7 +336,7 @@ static int init_childs(MasterADT m) {
 	// Luego los jugadores
 	int player_pid = -1;
 	
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
 			printf("MASTER::INIT_CHILDS: Error creating pipe\n");
 
@@ -353,7 +358,9 @@ static int init_childs(MasterADT m) {
 		}
 
 		// Agregar al game state
-		m->game_state->players[i].pid = player_pid;
+		writer_enter(m->game_sync);
+		gs->players[i].pid = player_pid;
+		writer_leave(m->game_sync);
 
 		// Si llegue aca estoy en master, configurar pipe
 		close(pipe_fd[1]); // Este no lo necesito
@@ -385,7 +392,7 @@ static int close_shm(MasterADT m) {
 
 static int cleanup(MasterADT m) {
 
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		close(m->pipes[i]);
 	}
 
@@ -403,7 +410,7 @@ static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
 /*
  * Verifica si un jugador esta bloqueado, devuelve verdadero si lo esta
 */
-static bool is_blocked(MasterADT m, int player_id) {
+static void check_blocked(MasterADT m, int player_id) {
 
 	GameState *gs = m->game_state;
 
@@ -424,15 +431,15 @@ static bool is_blocked(MasterADT m, int player_id) {
 
         const int cell = gs->board[ny * gs->width + nx];
         if (cell > 0) {
+            gs->players[player_id].blocked = false;
 			reader_leave(m->game_sync);
-            return false;
+
+			return ;
         }
     }
 
+	gs->players[player_id].blocked = true;
 	reader_leave(m->game_sync);
-
-	return true;
-
 }
 
 /*
@@ -525,8 +532,7 @@ static bool check_player(MasterADT m, int player_id) {
 	// Sale escritor	
 	writer_leave(m->game_sync);
 
-	if (is_blocked(m, player_id))
-		gs->players[player_id].blocked = true;
+	check_blocked(m, player_id);
 
 	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
@@ -541,27 +547,28 @@ static void pipe_set_blocked(MasterADT m, int id) {
 	// Buscar nuevo maximo
 	m->pipes_max_fd = -1;
 	
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (m->pipes[i] > m->pipes_max_fd) {
 			m->pipes_max_fd = m->pipes[i];
 		}
 	}
 }
 
-// Funcion que pregunta si todos los jugadores pueden moverse o no
+/*
+ * Funcion que pregunta si todos los jugadores pueden moverse o no
+ */
 bool no_player_can_move(MasterADT m) {
     const GameState *gs = m->game_state;
+    for (size_t i = 0; i < m->player_count; i++) {
 
-	reader_enter(m->game_sync);
+		reader_enter(m->game_sync);
+		bool is_blocked = gs->players[i].blocked;
+		reader_leave(m->game_sync);
 
-    for (size_t i = 0; i < gs->player_count; i++) {
-        if (!gs->players[i].blocked){
-			reader_leave(m->game_sync);
+        if (!is_blocked){
 			return false;
 		}
     }
-
-	reader_leave(m->game_sync);
 
     // Nadie pudo moverse (o todos estaban bloqueados)
     return true;
@@ -596,11 +603,19 @@ static int game_start(MasterADT m) {
             perror("MASTER::GAME_START: Error with select");
             return -1;
         } else if (ready == 0) {
-                m->game_state->finished = 1;
-        } else if (ready > 0) {
-			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 
-				if (m->pipes[i] == -1 || m->game_state->players[i].blocked)	// Ignorar
+			writer_enter(m->game_sync);
+            m->game_state->finished = 1;
+			writer_leave(m->game_sync);
+
+        } else if (ready > 0) {
+			for (unsigned int i = 0; i < m->player_count; i++) {
+
+				reader_enter(m->game_sync);
+				bool is_blocked = m->game_state->players[i].blocked;
+				reader_leave(m->game_sync);
+
+				if (m->pipes[i] == -1 || is_blocked)	// Ignorar
 					continue;
 
 				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {

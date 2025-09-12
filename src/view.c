@@ -28,7 +28,7 @@ typedef struct {
     WINDOW *window;
     int width, height;
     char finished;
-
+	unsigned int player_count;	// No va a cambiar mucho, conviene tener una copia
     GameState *game_state;
     GameSync *game_sync;
 } viewCDT;
@@ -106,7 +106,11 @@ void view_init_shm(viewADT v) {
     }
 
     v->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
+	
+	// Obtener el count
+	reader_enter(v->game_sync);
+	v->player_count = v->game_state->player_count;
+	reader_leave(v->game_sync);
 }
 
 void view_cleanup(viewADT v) {
@@ -128,29 +132,12 @@ void view_cleanup(viewADT v) {
 void view_render(viewADT v) {
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
-            int is_player = 0;
-            unsigned int player_idx = 0;
-            for (unsigned int p = 0; p < v->game_state->player_count; p++) {
-                if (v->game_state->players[p].x == j && v->game_state->players[p].y == i) {
-                    is_player = 1;
-                    player_idx = p;
-                    break;
-                }
-            }
+            
+			reader_enter(v->game_sync);
             int value = v->game_state->board[i * v->width + j];
-            int is_trail = 0;
-            unsigned int trail_player = 0;
-            if (!is_player) {
-                if (value < 0){
-                    is_trail = 1;
-                    trail_player = (unsigned int) ((-value)); // Ajuste para que A=0, B=1, etc.
-                } else if (value == 0) {
-                    is_trail = 1;
-                    trail_player = 0;
-                }
-            }
+			reader_leave(v->game_sync);
 
-            //Muestra tablero de datos
+            // Muestra tablero de datos
             
             // Título de la tabla
             const char *title = "Chomp Champs - Tabla de Jugadores";
@@ -164,25 +151,46 @@ void view_render(viewADT v) {
             mvwhline(v->window, 4, v->width + 2, '-', TABLE_WIDTH - 2);
 
             // Datos de los jugadores
-            for (size_t i = 0; i < v->game_state->player_count; i++) {
-            mvwprintw(v->window, 5 + (int)i, v->width + 2, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);
+            for (size_t i = 0; i < v->player_count; i++) {
+				reader_enter(v->game_sync);
+
+				mvwprintw(v->window, 5 + (int)i, 
+						v->width + 2, 
+						"%-10c | %-10d | %-10d | %-10d", 
+						'A' + (int)i, v->game_state->players[i].score, 
+						v->game_state->players[i].valid_reqs, 
+						v->game_state->players[i].invalid_reqs);
+
+				reader_leave(v->game_sync);
             }
+
             wrefresh(v->window);
 
-
-            if (is_player) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
-                mvwaddch(v->window, i + 1, j + 1, 'A' + player_idx);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
-            } else if (is_trail) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
-                mvwaddch(v->window, i + 1, j + 1, 'A' + trail_player);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
+			// Si es un jugador, marcarlo
+            if (value <= 0) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + ((-value) % 6)));
+                mvwaddch(v->window, i + 1, j + 1, 'A' + (-value));
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + ((-value) % 6)));
             } else {
                 mvwaddch(v->window, i + 1, j + 1, '0' + (value % 10));
             }
         }
     }
+
+	// Agregar las cabezas de los jugadores
+	unsigned int x, y;
+	for (unsigned int i = 0; i < v->player_count; i++) {
+		reader_enter(v->game_sync);
+		x = v->game_state->players[i].x;
+		y = v->game_state->players[i].y;
+		reader_leave(v->game_sync);
+
+		// Dibujarlo
+        wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + i % 6));
+        mvwaddch(v->window, y + 1, x + 1, 'A' + i);
+        wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + i % 6));
+ 	}
+
     wborder(v->window, '|', '|', '-', '-', '+', '+', '+', '+');
     wrefresh(v->window);
 }
