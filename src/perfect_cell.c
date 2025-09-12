@@ -37,8 +37,8 @@ unsigned char choose_move(PlayerADT p) {
             int proximity_penalty = (get_id(p) >= 0 && has_nearby_players(p, new_x, new_y, get_id(p))) ? 1 : 0;
 
             int score = 0;
+            //Si es endgame prioriza el puntaje de las celdas
             if (endgame) {
-                // En endgame, prioriza el puntaje de la celda y la profundidad (movilidad)
                 score = reward * (REWARD_WEIGHT + 10) +
                         depth * (DEPTH_WEIGHT + 5) +
                         trap_penalty * DEAD_END_WEIGHT * 2;

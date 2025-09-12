@@ -1,5 +1,3 @@
-
-
 #include "playerADT.h"
 
 struct PlayerCDT {
@@ -119,14 +117,6 @@ int get_id(PlayerADT p) {
     return p->id;
 }
 
-// NOTE: Evitar usar estas
-GameState* get_game_state(PlayerADT p) {
-    return p->game_state;
-}
-
-GameSync* get_game_sync(PlayerADT p) {
-    return p->game_sync;
-}
 
 int send_movement(PlayerADT p, unsigned char move) {
 
@@ -263,7 +253,7 @@ bool is_endgame(PlayerADT p) {
         }
     }
 
-    return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
+    return (free_cells * 100 / total_cells) < 20; // Si menos del 20% del tablero está libre, es endgame
 }
 
 

@@ -37,7 +37,7 @@ typedef viewCDT* viewADT;
 
 void view_init_ncurses(viewADT v) {
     
-    // If the terminal isnt defined, set it
+    // si la terminal no esta definida, hacerlo
     if (!getenv("TERM"))
         setenv("TERM", "xterm-256color", 1);
 
@@ -50,14 +50,12 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); // TABLE_WIDTH columnas extra para info 
-                                                                                                                        // y FRAME para el marco
-    
-    // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    // TABLE_WIDTH columnas extra para la info de la tabla y FRAME para el marco
+    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); 
 
     wrefresh(v->window);
 
-    // Check color support
+    // checkear si soporta color
     if (!has_colors() ) {
         endwin();
         printf("Your terminal does not support color\n");
@@ -124,7 +122,7 @@ void view_cleanup(viewADT v) {
 
 	system("stty sane"); // NO LO EJECUTA
 
-	endwin();   // Deallocate memory and end ncurses
+	endwin();   //desasignar memoria y terminar ncurses
 }
 
 void view_render(viewADT v) {
@@ -205,7 +203,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Init view context
+    // inicializa el contexto de la view
     viewCDT v = { 0 };
 
     v.width = atoi(argv[1]);
@@ -218,7 +216,7 @@ int main(int argc, char **argv) {
     // Main loop
 
     while(!v.finished) {
-        // Wait on semaphore
+        // espera el semaforo
         sem_wait(&(v.game_sync->state_change));
 
         view_update(&v);
