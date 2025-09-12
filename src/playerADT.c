@@ -30,28 +30,14 @@ PlayerADT init_player(int argc, char **argv) {
 	return p;
 }
 
-int p_init_shm(PlayerADT p) {
+int init_shm(PlayerADT p) {
 
-	// Game state
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
-    if (fd == -1) {
-        perror("PLAYER::INIT_SHM: Error game state\n");
-		return -1;
-    }
-    p->game_state = mmap(0, sizeof(GameState) + sizeof(int) * p->width * p->height, PROT_READ, MAP_SHARED, fd, 0);
-																		   
-	// Game sync
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
-    if (fd == -1) {
-        perror("PLAYER::INIT_SHM: Error game sync\n");
-		return -1;
-    }
+    p->game_state = open_game_state(p->width, p->height);
+    p->game_sync = open_game_sync();
 
-    p->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
+	reader_enter(p->game_sync);
 	// Chequear id de la game state
 	if (p->id == -1) {
-
 		// Obtenerlo
 		pid_t my_pid = getpid();
 		for (unsigned int i = 0; p->id < 0 && i < p->game_state->player_count; i++) {
@@ -59,8 +45,8 @@ int p_init_shm(PlayerADT p) {
 				p->id = i;
 			}
 		}
-
 	}
+	reader_leave(p->game_sync);
 
 	return 0;
 }

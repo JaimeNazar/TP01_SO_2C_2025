@@ -44,3 +44,26 @@ void reader_leave(GameSync* sync) {
 	// Liberar variable
 	sem_post(&sync->reader_count_mutex);
 }
+
+GameState* open_game_state(unsigned int width, unsigned int height) {
+
+	// Tener en consideracion el tablero
+	int state_size = sizeof(GameState) + sizeof(int) * width * height; 
+
+    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Abrir memoria compartida
+    if (fd == -1) {
+        perror("COMMON::GET_GAME_STATE: Error opening shmem\n");
+    }
+
+    return mmap(0, state_size, PROT_READ, MAP_SHARED, fd, 0); // Mapear la memoria
+
+}
+
+GameSync* open_game_sync() {
+	int fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
+    if (fd == -1) {
+        perror("COMMON::GET_GAME_SYNC: Error opening shmem\n");
+    }
+
+    return mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+}

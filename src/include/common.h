@@ -1,13 +1,18 @@
-#include <semaphore.h>  
-#include <stdbool.h>
-
-#define GAME_STATE_SHM "/game_state"
-#define GAME_SYNC_SHM "/game_sync"
-
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <semaphore.h>  
+
+#include <stdlib.h>
+#include <ncurses.h>
+#include <sys/mman.h>
+#include <sys/stat.h>       
+#include <fcntl.h>
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <pty.h>
+#include <sys/ioctl.h>
+#include <semaphore.h>
 #include <stdbool.h>
 
 #define GAME_STATE_SHM "/game_state"
@@ -48,5 +53,8 @@ void writer_leave(GameSync* sync);
 
 void reader_enter(GameSync* sync);
 void reader_leave(GameSync* sync);
+
+GameState* open_game_state();
+GameSync* open_game_sync();
 
 #endif // COMMON_H

@@ -1,12 +1,3 @@
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <string.h>
-#include <time.h>
-#include <stdio.h>
-#include <unistd.h>
-#include "common.h"
 #include "playerADT.h"
 
 #define REWARD_WEIGHT 15
@@ -68,8 +59,7 @@ int main(int argc, char **argv) {
     if (p == NULL)
         return -1;
 
-    // TODO: Error handling
-    if(p_init_shm(p) == -1){
+    if(init_shm(p) == -1){
         return -1;
     }
 

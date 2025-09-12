@@ -579,7 +579,7 @@ static int game_start(MasterADT m) {
     struct timeval tv = {m->timeout, 0};
     time_t last_time = time(NULL);
 
-	while (!m->game_state->finished) {
+	while (1) {
 
 		// Sincronizacion vista
 		sem_post(&m->game_sync->state_change);
@@ -588,48 +588,58 @@ static int game_start(MasterADT m) {
 
         wait_delay(m->delay);
 
-        if(no_player_can_move(m)) {
-            m->game_state->finished = 1;
-            continue;
-        }
-
+		// Jugadores
         int elapsed = (int)difftime(time(NULL), last_time);
         tv.tv_sec = m->timeout - elapsed;
 
         // Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
 		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, &tv);
 
-		if (ready == -1) {
-            perror("MASTER::GAME_START: Error with select");
-            return -1;
-        } else if (ready == 0) {
+        if(no_player_can_move(m) || ready == 0) {
+			writer_enter(m->game_sync);
+            m->game_state->finished = 1;
+			writer_leave(m->game_sync);
+			
+			// Notificar a la vista, para que no se quede esperando
+			sem_post(&m->game_sync->state_change);
 
+			return 0;
+        }
+
+		if (ready < 0) {
 			writer_enter(m->game_sync);
             m->game_state->finished = 1;
 			writer_leave(m->game_sync);
 
-        } else if (ready > 0) {
-			for (unsigned int i = 0; i < m->player_count; i++) {
+			sem_post(&m->game_sync->state_change);
 
-				reader_enter(m->game_sync);
-				bool is_blocked = m->game_state->players[i].blocked;
-				reader_leave(m->game_sync);
+            perror("MASTER::GAME_START: Error with select");
+            return -1;
 
-				if (m->pipes[i] == -1 || is_blocked)	// Ignorar
-					continue;
+        }
 
-				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
-                    // LUEGO leer el movimiento
-                    if(!check_player(m, i)){//si es valido
-                       last_time = time(NULL); // resetear timeout
-                    }
-                } else {
-					// Esta bloqueado, actualizar data
-					pipe_set_blocked(m, i);
-				}
+		// Si llegue aca entonces value > 0
+		for (unsigned int i = 0; i < m->player_count; i++) {
 
+			reader_enter(m->game_sync);
+			bool is_blocked = m->game_state->players[i].blocked;
+			reader_leave(m->game_sync);
+
+			if (m->pipes[i] == -1 || is_blocked)	// Ignorar
+				continue;
+
+			if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
+                // LUEGO leer el movimiento
+                if(!check_player(m, i)){//si es valido
+                    last_time = time(NULL); // resetear timeout
+                }
+            } else {
+				// Esta bloqueado, actualizar data
+				pipe_set_blocked(m, i);
 			}
+
 		}
+		
 
 	}
 
@@ -637,18 +647,22 @@ static int game_start(MasterADT m) {
 }
 
 void print_final_results(const MasterADT m) {
-    const GameState *st = m->game_state;
+    const GameState *gs = m->game_state;
 
     // limpiar pantalla
     printf("\033[2J\033[H");
 
     puts("View exited");  // puts agrega '\n' por sí mismo
 
-    for (unsigned i = 0; i < st->player_count; i++) {
-        const Player *p = &st->players[i];
+    for (unsigned i = 0; i < m->player_count; i++) {
+
+		reader_enter(m->game_sync);
+        const Player *p = &gs->players[i];
         // Usamos \r\n por si la TTY quedó sin traducción de NL
         printf("Player %s (%u) with a score of %u / %u / %u\r\n",
                p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
+
+		reader_leave(m->game_sync);
     }
 
 	
@@ -660,6 +674,8 @@ static void show_game_info(const MasterADT m) {
 	// limpiar pantalla
 	printf("\033[2J\033[H");
 
+	reader_enter(m->game_sync);
+
 	printf("width: %u\n", st->width);
 	printf("height: %u\n", st->height);
 	printf("delay: %d\n", m->delay);
@@ -670,6 +686,9 @@ static void show_game_info(const MasterADT m) {
 	for (unsigned i = 0; i < st->player_count; i++) {
 		printf("  %s\n", m->player_path[i]);
 	}
+
+	reader_leave(m->game_sync);
+
 	sleep(2); // Pausa para que el usuario pueda leer
 	fflush(stdout);
 }
@@ -714,10 +733,13 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 	// Main loop
-	game_start(m);
-
+	if (game_start(m) == -1)
+		printf("MASTER::MAIN: Main loop returned with error\n");
+		
 	//limpiar pantalla y mostrar resultados
 	print_final_results(m);
+
+	system("stty sane"); // TEMPORAL, deberia estar en view
 
 	// Una vez termino todo, liberar recursos
 	cleanup(m);

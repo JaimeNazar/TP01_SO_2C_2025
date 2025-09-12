@@ -1,17 +1,3 @@
-#include <stdlib.h>
-#include <ncurses.h>
-#include <sys/mman.h>
-#include <sys/stat.h>       
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdio.h>
-
-#include <unistd.h>
-#include <pty.h>
-#include <sys/ioctl.h>
-#include <stdlib.h>
-
 #include "common.h"
 
 // Color, experimental
@@ -88,25 +74,11 @@ void view_init_ncurses(viewADT v) {
     init_pair(PLAYER_PAIR_BASE + 20 + 9, COLOR_WHITE, COLOR_BLUE);     // Path Jugador 10
 }
 
-// TODO: Agregar como libreria
 void view_init_shm(viewADT v) {
-    
-    // TODO: Check FLAGS
-    // Shared shmory
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
 
-    v->game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    v->game_state = open_game_state(v->width, v->height);
+	v->game_sync = open_game_sync();
 
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
-
-    v->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	
 	// Obtener el count
 	reader_enter(v->game_sync);
 	v->player_count = v->game_state->player_count;
@@ -114,17 +86,14 @@ void view_init_shm(viewADT v) {
 }
 
 void view_cleanup(viewADT v) {
-
-    while(1){}
-    clrtoeol();
-	wrefresh(v->window);
-
+    
     if (v->window) {
+        wclrtoeol(v->window);
+        wrefresh(v->window);
+
         delwin(v->window);
         v->window = NULL;
     }
-
-	system("stty sane"); // NO LO EJECUTA
 
 	endwin();   //desasignar memoria y terminar ncurses
 }
