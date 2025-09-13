@@ -765,8 +765,6 @@ int main (int argc, char *argv[]) {
 	//limpiar pantalla y mostrar resultados
 	print_final_results(m);
 
-	system("stty sane"); // TEMPORAL, deberia estar en view
-
 	// Una vez termino todo, liberar recursos
 	cleanup(m);
 	return 0;
