@@ -12,10 +12,10 @@ unsigned int total_players = 0;
 
 unsigned char choose_move(PlayerADT p) {
     unsigned char best_direction = 0;
-    int best_score = -1;
+    int best_score = -100000;
     bool found_move = false;
 
-    bool endgame = is_endgame(p);
+    bool change_strategy = (total_players > 0 && ((int)(board_size / total_players)) < 45) || is_endgame(p);
 
     for (unsigned char dir = 0; dir < 8; dir++) {
         int dx = 0, dy = 0;
@@ -24,45 +24,40 @@ unsigned char choose_move(PlayerADT p) {
         int new_x = get_x(p) + dx;
         int new_y = get_y(p) + dy;
 
+
+        int score = 0;
         if (is_cell_free(p, new_x, new_y)) {
 
-            int score = 0;
 
+            int reward = get_board_cell(p, new_x, new_y);
+            int free_neighbors = count_free_neighbors(p, new_x, new_y);
+            int trap_penalty = is_potential_trap(p, new_x, new_y) ? 1 : 0;
+            int depth = calculate_depth(p, dx, dy, 4);
+            int proximity_penalty = (get_id(p) >= 0 && has_nearby_players(p, new_x, new_y, get_id(p))) ? 1 : 0;
 
-            // Si el tablero es pequeño y hay más de muchos jugadores, usa greedy; sino el algoritmo normal
-            if (total_players > 0 && ((int)(board_size / total_players)) < 45) {
-
-                score = get_board_cell(p, new_x, new_y);
-                
+            //Si es endgame o si hay muchos jugadores en un tablero pequeño prioriza mas que nada el puntaje de las celdas
+            if (change_strategy) {
+                score = reward * (REWARD_WEIGHT * 5) +
+                        depth * (DEPTH_WEIGHT + 5) +
+                        trap_penalty * DEAD_END_WEIGHT * 2;
             } else {
-                int reward = get_board_cell(p, new_x, new_y);
-                int free_neighbors = count_free_neighbors(p, new_x, new_y);
-                int trap_penalty = is_potential_trap(p, new_x, new_y) ? 1 : 0;
-                int depth = calculate_depth(p, dx, dy, 4);
-                int proximity_penalty = (get_id(p) >= 0 && has_nearby_players(p, new_x, new_y, get_id(p))) ? 1 : 0;
-
-                //Si es endgame prioriza el puntaje de las celdas
-                if (endgame) {
-                    score = reward * (REWARD_WEIGHT + 10) +
-                            depth * (DEPTH_WEIGHT + 5) +
-                            trap_penalty * DEAD_END_WEIGHT * 2;
-                } else {
-                    score = reward * REWARD_WEIGHT +
-                            free_neighbors * FREE_NEIGHBORS_WEIGHT +
-                            trap_penalty * DEAD_END_WEIGHT +
-                            depth * DEPTH_WEIGHT +
-                            proximity_penalty * PLAYER_PROXIMITY_PENALTY;
+                score = reward * REWARD_WEIGHT +
+                        free_neighbors * FREE_NEIGHBORS_WEIGHT +
+                        trap_penalty * DEAD_END_WEIGHT +
+                        depth * DEPTH_WEIGHT +
+                        proximity_penalty * PLAYER_PROXIMITY_PENALTY;
                 }
-            }
 
-            if (!found_move || score > best_score) {
+                if (!found_move || score > best_score) {
                 best_direction = dir;
                 best_score = score;
                 found_move = true;
             }
         }
-    }
 
+            
+    }
+    
     return best_direction;
 }
 
