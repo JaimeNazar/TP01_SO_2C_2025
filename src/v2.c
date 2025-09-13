@@ -58,12 +58,13 @@ int main(int argc, char **argv) {
 
     while (1) {
 
-		// Verificar si el juego terminó o si estamos bloqueados
+        // Guardar estado actual
+        get_state_snapshot(p);
+
+        // Verificar si el juego terminó o si estamos bloqueados
         if (!still_playing(p)) {
             break;
         }
-        // Guardar estado actual
-        get_state_snapshot(p);
 
         unsigned char move = choose_move(p);
 

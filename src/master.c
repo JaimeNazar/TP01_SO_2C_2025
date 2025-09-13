@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include <semaphore.h>  
 
@@ -38,6 +40,7 @@ typedef struct {
 	int pipes[MAX_PLAYERS];		// fd de la salida de los pipes de cada jugador
 	int pipes_max_fd;
 	fd_set pipes_set;
+    pid_t view_pid;
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
@@ -63,7 +66,6 @@ static int str_copy(char *s1, char *s2) {
 static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, unsigned int* height, unsigned int *player_count) {
 
 	int i = 1;	// Saltearse nombre del programa
-
 	while (i < argc) {
 
 		// Tipo de argumento
@@ -95,7 +97,6 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 							printf("MASTER::PARSE: Invalid player path\n");
 							return -1;
 						}
-						
 						(*player_count)++;
 						i++;
 					}
@@ -188,6 +189,7 @@ MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	m->player_count = 0;
 	FD_ZERO(&m->pipes_set);
 	m->pipes_max_fd = -1;
+    m->view_pid = -1;
 
 	return m;
 }
@@ -325,16 +327,17 @@ static int init_childs(MasterADT m) {
 	reader_leave(m->game_sync);
 
 	// Primero la vista(antes del pipe)
-	int view_pid = fork();
+	pid_t view_pid = fork();
 	if (view_pid == 0) {
 		return execve(m->view_path, argv, NULL); 
 	}
+    m->view_pid = view_pid;
 
 	// Ahora preparar los pipes
 	int pipe_fd[2]; // Aca se guardan los dos extremos
 
 	// Luego los jugadores
-	int player_pid = -1;
+	pid_t player_pid = -1;
 	
 	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
@@ -554,7 +557,7 @@ static void pipe_set_blocked(MasterADT m, int id) {
 	}
 }
 
-/*
+/**
  * Funcion que pregunta si todos los jugadores pueden moverse o no
  */
 bool no_player_can_move(MasterADT m) {
@@ -588,7 +591,7 @@ static int game_start(MasterADT m) {
 
         wait_delay(m->delay);
 
-		// Jugadores
+        // Actualizar timeout
         int elapsed = (int)difftime(time(NULL), last_time);
         tv.tv_sec = m->timeout - elapsed;
 
@@ -597,6 +600,11 @@ static int game_start(MasterADT m) {
 
         if(no_player_can_move(m) || ready == 0) {
 			writer_enter(m->game_sync);
+            //poner todos los jugadores como bloqueados
+            for (unsigned int i = 0; i < m->player_count; i++) {
+                m->game_state->players[i].blocked = true;
+            }
+
             m->game_state->finished = 1;
 			writer_leave(m->game_sync);
 			
@@ -652,15 +660,33 @@ void print_final_results(const MasterADT m) {
     // limpiar pantalla
     printf("\033[2J\033[H");
 
-    puts("View exited");  // puts agrega '\n' por sí mismo
+    // Avisar a la vista que se termino
+    sem_post(&m->game_sync->state_change);
+    sem_wait(&m->game_sync->render_done);
+
+    int status = 0;
+    if (m->view_pid > 0) {
+        pid_t r = waitpid(m->view_pid, &status, 0);
+        if (r == m->view_pid) {
+            if (WIFEXITED(status)) {
+                printf("View exited (%d)\n", WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                printf("View killed by signal %d\n", WTERMSIG(status));
+            } else {
+                printf("View exited (unknown)\n");
+            }
+        }
+    }
 
     for (unsigned i = 0; i < m->player_count; i++) {
-
 		reader_enter(m->game_sync);
         const Player *p = &gs->players[i];
+        sem_post(&m->game_sync->player_can_move[i]); // Por si algun jugador quedo esperando
+        int status = 0;
+        waitpid(p->pid, &status, 0);
         // Usamos \r\n por si la TTY quedó sin traducción de NL
-        printf("Player %s (%u) with a score of %u / %u / %u\r\n",
-               p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
+        printf("Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
+               p->name,i,p->pid,status, p->score, p->valid_reqs, p->invalid_reqs);
 
 		reader_leave(m->game_sync);
     }
@@ -735,7 +761,7 @@ int main (int argc, char *argv[]) {
 	// Main loop
 	if (game_start(m) == -1)
 		printf("MASTER::MAIN: Main loop returned with error\n");
-		
+
 	//limpiar pantalla y mostrar resultados
 	print_final_results(m);
 
