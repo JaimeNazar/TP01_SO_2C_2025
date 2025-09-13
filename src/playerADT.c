@@ -104,6 +104,13 @@ int get_id(PlayerADT p) {
 }
 
 
+unsigned int get_player_count(PlayerADT p) {
+    if (p == NULL || p->game_state == NULL)
+        return 0;
+    return p->game_state->player_count;
+}
+
+
 int send_movement(PlayerADT p, unsigned char move) {
 
     // Esperar permiso para enviar movimiento
