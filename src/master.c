@@ -8,7 +8,6 @@
 #include "common.h"
 
 #define MAX_STR_LEN 20
-
 #define DEFAULT_WIDTH 10
 #define DEFAULT_HEIGHT 10
 #define DEFAULT_DELAY 200
@@ -347,6 +346,7 @@ static int init_childs(MasterADT m) {
 
 	// Luego los jugadores
 	pid_t player_pid = -1;
+	char name_buff[MAX_PLAYER_NAME_SIZE];
 	
 	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
@@ -369,8 +369,13 @@ static int init_childs(MasterADT m) {
 			return execve(m->player_path[i], argv, NULL);
 		}
 
+		// Armar nombre
+		sprintf(name_buff, "Player %d", i);
+
 		// Agregar al game state
 		writer_enter(m->game_sync);
+		strcpy(gs->players[i].name, name_buff);
+		
 		gs->players[i].pid = player_pid;
 		writer_leave(m->game_sync);
 
@@ -677,24 +682,55 @@ void print_final_results(const MasterADT m) {
     waitpid(m->view_pid, &v_status, 0);
     printf("View exited (%d)\n", v_status);
 
+	int winner_id = -1;
+	char winner_name[MAX_PLAYER_NAME_SIZE] = {0};
 
+	// Data de cada jugador
+	char player_name[MAX_PLAYER_NAME_SIZE] = {0};
+	pid_t pid;
+	unsigned int score, valid_reqs, invalid_reqs;
 
-    for (unsigned i = 0; i < m->player_count; i++) {
+	for (unsigned i = 0; i < m->player_count; i++) {
+
+		// Leer los datos necesarios del state
 		reader_enter(m->game_sync);
-        const Player *p = &gs->players[i];
-        sem_post(&m->game_sync->player_can_move[i]); // Por si algun jugador quedo esperando
-        int status = 0;
-        waitpid(p->pid, &status, 0);
-        // Usamos \r\n por si la TTY quedó sin traducción de NL
-        printf("Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
-               m->player_path[i],i,p->pid,status, p->score, p->valid_reqs, p->invalid_reqs);
 
+		const Player *p = &gs->players[i];
+
+		pid = p->pid;
+		score = p->score;
+		valid_reqs = p->valid_reqs;
+		invalid_reqs = p->invalid_reqs;
+		strcpy(player_name, p->name);
+		
 		reader_leave(m->game_sync);
-    }
 
-	
-    fflush(stdout);
+		sem_post(&m->game_sync->player_can_move[i]); // Por si algun jugador quedo esperando
+		int status = 0;
+
+		// Esperar a que termine el proceso hijo
+		waitpid(pid, &status, 0);
+
+		// Usamos \r\n por si la TTY quedó sin traducción de NL
+		printf("[%s] %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
+			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
+
+		reader_enter(m->game_sync);
+		if (
+			winner_id == -1 || (score > gs->players[winner_id].score) ||
+			(score == gs->players[winner_id].score && valid_reqs > gs->players[winner_id].valid_reqs) ||
+			(score == gs->players[winner_id].score && valid_reqs == gs->players[winner_id].valid_reqs && invalid_reqs < gs->players[winner_id].invalid_reqs)
+		) {
+			winner_id = i;
+			strcpy(winner_name, player_name);
+		}
+		reader_leave(m->game_sync);
+
+	}
+
+	printf("\nChompChamp Champion: [%s] %s\n", winner_name, m->player_path[winner_id]);
 }
+
 
 static void show_game_info(const MasterADT m) {
 	const GameState *st = m->game_state;
@@ -711,13 +747,12 @@ static void show_game_info(const MasterADT m) {
 	printf("view: %s\n", m->view_path);
 	printf("num_players: %u\n", st->player_count);
 	for (unsigned i = 0; i < st->player_count; i++) {
-		printf("  %s\n", m->player_path[i]);
+		printf("[Player: %c]  %s\n", '0' + i, m->player_path[i]);
 	}
 
 	reader_leave(m->game_sync);
 
 	sleep(2); // Pausa para que el usuario pueda leer
-	fflush(stdout);
 }
 
 int main (int argc, char *argv[]) {

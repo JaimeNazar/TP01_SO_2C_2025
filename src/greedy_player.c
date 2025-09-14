@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
         if (!still_playing(p)) {
             break;
         }
-
+        
         // Elegir y enviar movimiento
         unsigned char move = choose_move(p);
 
