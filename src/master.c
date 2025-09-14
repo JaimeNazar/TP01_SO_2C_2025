@@ -2,6 +2,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <sys/select.h>
+#include <ctype.h>
+
 
 #include "common.h"
 
@@ -13,6 +15,9 @@
 #define DEFAULT_TIMEOUT 10
 #define MAX_PLAYERS 9
 #define MIN_PLAYERS 1
+
+#define MAX_WIDTH 50
+#define MAX_HEIGHT 50
 
 typedef struct {
 	int delay, seed, timeout;	
@@ -46,6 +51,16 @@ static int str_copy(char *s1, char *s2) {
 	return 0;
 }
 
+bool is_number(const char *str) {
+    if (str == NULL || *str == '\0')
+        return false;
+    for (int i = 0; str[i]; i++) {
+        if (str[i] < '0' || str[i] > '9')
+            return false;
+    }
+    return true;
+}
+
 static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, unsigned int* height, unsigned int *player_count) {
 
 	int i = 1;	// Saltearse nombre del programa
@@ -54,7 +69,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 		// Tipo de argumento
 		if (argv[i][0] == '-') {
 			switch(argv[i++][1]) {
-				case 'v':
+				case 'v': // view
 					// Obtener el file path
 					if (str_copy(m->view_path, argv[i++])) {
 						printf("MASTER::PARSE: Invalid view path\n");
@@ -62,7 +77,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 					}
 					
 					break;
-				case 'p':
+				case 'p': // players
 					// Guardar jugadores hasta el proximo argumento
 					while (i < argc && argv[i][0] != '-') {
 						if (*player_count >= MAX_PLAYERS) {
@@ -79,33 +94,60 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 					}
 
 					break;
-                case 'd':
+                case 'd': // delay
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -d\n");
                         return -1;
                     }
+
+					if (atoi(argv[i]) <= 0 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid delay value\n");
+						return -1;
+					}
+
+
                     m->delay = atoi(argv[i++]);
                     break;
 
-                case 't':
+                case 't': // timeout
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -t\n");
                         return -1;
                     }
+
+					if (atoi(argv[i]) <= 0 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid timeout value\n");
+						return -1;
+					}
+
                     m->timeout = atoi(argv[i++]);
                     break;
 
-                case 'w':
-                    *width = atoi(argv[++i]);
+                case 'w': // width
+					if(atoi(argv[i]) <= 0 || atoi(argv[i]) > MAX_WIDTH || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid width value\n");
+						return -1;
+					} 
+                    *width = atoi(argv[i++]);
                     break;
 
-                case 'h':
+                case 'h': // height
+
+					if(atoi(argv[i]) <= 0 || atoi(argv[i]) > MAX_HEIGHT || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid height value\n");
+						return -1;
+					}
                     *height = atoi(argv[i++]);
                     break;
 
-                case 's':
+                case 's': //seed
+					if( !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid seed value\n");
+						return -1;
+					}
                     m->seed = atoi(argv[i++]);
                     break;
+					
                 default:
 					printf("MASTER::PARSE: Invalid argument type: %c \n", argv[i][1]);
 					return -1;
