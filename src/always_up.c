@@ -13,7 +13,12 @@ unsigned char choose_move(PlayerADT p) {
         return -1;
     }
 
-
+/**
+ * Always Up fue creado con el proposito de testear los timeouts del master. No es un jugadore real.
+ * @param argc
+ * @param argv
+ * @return
+ */
 int main(int argc, char **argv) {
     PlayerADT p = init_player(argc, argv);
     if (p == NULL)
