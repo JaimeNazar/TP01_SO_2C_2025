@@ -712,7 +712,7 @@ void print_final_results(const MasterADT m) {
 		waitpid(pid, &status, 0);
 
 		// Usamos \r\n por si la TTY quedó sin traducción de NL
-		printf("[%s] Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
+		printf("[%s] %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
 			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
 
 		reader_enter(m->game_sync);
@@ -747,7 +747,7 @@ static void show_game_info(const MasterADT m) {
 	printf("view: %s\n", m->view_path);
 	printf("num_players: %u\n", st->player_count);
 	for (unsigned i = 0; i < st->player_count; i++) {
-		printf("  %s\n", m->player_path[i]);
+		printf("[Player: %c]  %s\n", '0' + i, m->player_path[i]);
 	}
 
 	reader_leave(m->game_sync);
