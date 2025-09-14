@@ -673,19 +673,11 @@ void print_final_results(const MasterADT m) {
     sem_post(&m->game_sync->state_change);
     sem_wait(&m->game_sync->render_done);
 
-    int status = 0;
-    if (m->view_pid > 0) {
-        pid_t r = waitpid(m->view_pid, &status, 0);
-        if (r == m->view_pid) {
-            if (WIFEXITED(status)) {
-                printf("View exited (%d)\n", WEXITSTATUS(status));
-            } else if (WIFSIGNALED(status)) {
-                printf("View killed by signal %d\n", WTERMSIG(status));
-            } else {
-                printf("View exited (unknown)\n");
-            }
-        }
-    }
+    int v_status = 0;
+    waitpid(m->view_pid, &v_status, 0);
+    printf("View exited (%d)\n", v_status);
+
+
 
     for (unsigned i = 0; i < m->player_count; i++) {
 		reader_enter(m->game_sync);
@@ -695,7 +687,7 @@ void print_final_results(const MasterADT m) {
         waitpid(p->pid, &status, 0);
         // Usamos \r\n por si la TTY quedó sin traducción de NL
         printf("Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
-               p->name,i,p->pid,status, p->score, p->valid_reqs, p->invalid_reqs);
+               m->player_path[i],i,p->pid,status, p->score, p->valid_reqs, p->invalid_reqs);
 
 		reader_leave(m->game_sync);
     }
