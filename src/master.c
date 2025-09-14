@@ -224,7 +224,7 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	gs->width = width;
 	gs->height = height;
 	gs->player_count = player_count;
-	m->player_count = player_count;	// Tmb guardar copia en el master, para evitar entrar en state todo el tiempo
+	m->player_count = player_count;	// Tambien guardar copia en el master, para evitar entrar en state todo el tiempo
 
 	// Llenar el tablero
 	srand(m->seed);
@@ -237,13 +237,12 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 		}
 	}
 
-	// Calcula un rectángulo central (60% del tablero, centrado)
+	// Calcula un rectángulo interior para colocar a los jugadores 
 	int rect_w = (int)(gs->width * 0.6);
 	int rect_h = (int)(gs->height * 0.6);
 	int rect_x0 = (gs->width - rect_w) / 2;
 	int rect_y0 = (gs->height - rect_h) / 2;
 
-	// Calcula la cantidad de celdas del borde del rectángulo
 	int border_cells = 2 * (rect_w + rect_h) - 4;
 
 	// Guardar todas las posiciones del borde en un array
@@ -251,28 +250,28 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	int border_y[border_cells];
 	int idx = 0;
 
-	// Borde superior (izq a der)
+	// Borde superior 
 	for (int x = 0; x < rect_w; x++) {
 	    border_x[idx] = rect_x0 + x;
 	    border_y[idx++] = rect_y0;
 	}
-	// Borde derecho (arriba a abajo, sin repetir esquina)
+	// Borde derecho 
 	for (int y = 1; y < rect_h - 1; y++) {
 	    border_x[idx] = rect_x0 + rect_w - 1;
 	    border_y[idx++] = rect_y0 + y;
 	}
-	// Borde inferior (der a izq)
+	// Borde inferior
 	for (int x = rect_w - 1; x >= 0; x--) {
 	    border_x[idx] = rect_x0 + x;
 	    border_y[idx++] = rect_y0 + rect_h - 1;
 	}
-	// Borde izquierdo (abajo a arriba, sin repetir esquina)
+	// Borde izquierdo 
 	for (int y = rect_h - 2; y > 0; y--) {
 	    border_x[idx] = rect_x0;
 	    border_y[idx++] = rect_y0 + y;
 	}
 
-	// Ahora ubicamos a los jugadores equidistantes
+	// Ubicar jugadores equidistantemente
 	for (unsigned int i = 0; i < gs->player_count; i++) {
 	    int pos = (i * border_cells) / gs->player_count;
 	    int px = border_x[pos];
@@ -286,7 +285,6 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	    gs->players[i].pid = -1;
 	    gs->players[i].blocked = 0;
 
-	    // Marcar la celda como ocupada por el jugador
 	    gs->board[py * gs->width + px] = -1 * (int)i;
 	}
 

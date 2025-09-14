@@ -7,7 +7,7 @@ struct PlayerCDT {
 	int id;								// Game state values
 	char blocked;
 	char game_finished;
-	int board[];	// Demasiado? Copiar todo el tablero?
+	int board[];
 };
 
 PlayerADT init_player(int argc, char **argv) {
@@ -186,7 +186,6 @@ int calculate_depth(PlayerADT p, int dx, int dy, int max_depth) {
     return depth;
 }
 
-// NOTE: No se podria hacer leyendo los negativos del tablero?
 bool has_nearby_players(PlayerADT p, int x, int y, int my_id) {
     
     reader_enter(p->game_sync);
