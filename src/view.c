@@ -27,9 +27,6 @@ void view_init_ncurses(viewADT v) {
     if (!getenv("TERM"))
         setenv("TERM", "xterm-256color", 1);
 
-
-    // TODO: Error check
-
     // Ncurses
     initscr();
     clear();

@@ -1,23 +1,9 @@
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <sys/mman.h> 
-#include <sys/stat.h>  
-#include <sys/select.h>
-#include <fcntl.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
+
 #include <sys/wait.h>
-
-#include <semaphore.h>  
-
-// TODO: Put in common.h shared dependencies
+#include <time.h>
+#include <sys/select.h>
 
 #include "common.h"
-#include <errno.h>
 
 #define MAX_STR_LEN 20
 
@@ -67,21 +53,16 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
 		// Tipo de argumento
 		if (argv[i][0] == '-') {
-			switch(argv[i][1]) {
+			switch(argv[i++][1]) {
 				case 'v':
 					// Obtener el file path
-					i++;
-
-					if (str_copy(m->view_path, argv[i])) {
+					if (str_copy(m->view_path, argv[i++])) {
 						printf("MASTER::PARSE: Invalid view path\n");
 						return -1;
 					}
 					
-					i++;
 					break;
 				case 'p':
-					i++;
-					
 					// Guardar jugadores hasta el proximo argumento
 					while (i < argc && argv[i][0] != '-') {
 						if (*player_count >= MAX_PLAYERS) {
@@ -99,41 +80,31 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
 					break;
                 case 'd':
-                    i++;
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -d\n");
                         return -1;
                     }
-                    m->delay = atoi(argv[i]);
-                    i++;
+                    m->delay = atoi(argv[i++]);
                     break;
 
                 case 't':
-                    i++;
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -t\n");
                         return -1;
                     }
-                    m->timeout = atoi(argv[i]);
-                    i++;
+                    m->timeout = atoi(argv[i++]);
                     break;
 
                 case 'w':
-                    i++;
-                    *width = atoi(argv[i]);
-                    i++;
+                    *width = atoi(argv[++i]);
                     break;
 
                 case 'h':
-                    i++;
-                    *height = atoi(argv[i]);
-                    i++;
+                    *height = atoi(argv[i++]);
                     break;
 
                 case 's':
-                    i++;
-                    m->seed = atoi(argv[i]);
-                    i++;
+                    m->seed = atoi(argv[i++]);
                     break;
                 default:
 					printf("MASTER::PARSE: Invalid argument type: %c \n", argv[i][1]);
