@@ -158,9 +158,16 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
 	}
 
+
 	// Si no se registro ningun jugador al llegar aca, notificar al usuario
 	if(*player_count < MIN_PLAYERS) {
 		printf("MASTER::PARSE: At least one player must be specified\n");
+		return -1;
+	}
+
+	// Si no se pasó view, no arrancar
+	if (m->view_path[0] == '\0') {
+		printf("MASTER::PARSE: A view must be specified\n");
 		return -1;
 	}
 
