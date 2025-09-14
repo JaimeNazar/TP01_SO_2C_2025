@@ -7,6 +7,7 @@
 
 #include "common.h"
 
+#define MAX_STR_LEN 20
 #define DEFAULT_WIDTH 10
 #define DEFAULT_HEIGHT 10
 #define DEFAULT_DELAY 200
@@ -369,7 +370,7 @@ static int init_childs(MasterADT m) {
 
 		// Agregar al game state
 		writer_enter(m->game_sync);
-		strcpy(gs->players[i].name, m->player_path[i]); // El nombre sera el path
+		
 		gs->players[i].pid = player_pid;
 		writer_leave(m->game_sync);
 
