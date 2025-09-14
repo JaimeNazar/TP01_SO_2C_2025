@@ -682,11 +682,13 @@ void print_final_results(const MasterADT m) {
     waitpid(m->view_pid, &v_status, 0);
     printf("View exited (%d)\n", v_status);
 
-	reader_enter(m->game_sync);
-	const Player *winner = &gs->players[0];
-	reader_leave(m->game_sync);
+	int winner_id = -1;
+	char winner_name[MAX_PLAYER_NAME_SIZE] = {0};
 
-	unsigned winner_letter = 0;
+	// Data de cada jugador
+	char player_name[MAX_PLAYER_NAME_SIZE] = {0};
+	pid_t pid;
+	unsigned int score, valid_reqs, invalid_reqs;
 
 	for (unsigned i = 0; i < m->player_count; i++) {
 
@@ -695,10 +697,11 @@ void print_final_results(const MasterADT m) {
 
 		const Player *p = &gs->players[i];
 
-		pid_t pid = p->pid;
-		unsigned int score = p->score;
-		unsigned int valid_reqs = p->valid_reqs;
-		unsigned int invalid_reqs = p->invalid_reqs;
+		pid = p->pid;
+		score = p->score;
+		valid_reqs = p->valid_reqs;
+		invalid_reqs = p->invalid_reqs;
+		strcpy(player_name, p->name);
 		
 		reader_leave(m->game_sync);
 
@@ -708,26 +711,24 @@ void print_final_results(const MasterADT m) {
 		// Esperar a que termine el proceso hijo
 		waitpid(pid, &status, 0);
 
-		// Letra identificadora
-		char letter = 'A' + i;
 		// Usamos \r\n por si la TTY quedó sin traducción de NL
-		printf("[%c] Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
-			   letter, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
+		printf("[%s] Player %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
+			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
 
 		reader_enter(m->game_sync);
 		if (
-			(score > winner->score) ||
-			(score == winner->score && valid_reqs > winner->valid_reqs) ||
-			(score == winner->score && valid_reqs == winner->valid_reqs && invalid_reqs < winner->invalid_reqs)
+			winner_id == -1 || (score > gs->players[winner_id].score) ||
+			(score == gs->players[winner_id].score && valid_reqs > gs->players[winner_id].valid_reqs) ||
+			(score == gs->players[winner_id].score && valid_reqs == gs->players[winner_id].valid_reqs && invalid_reqs < gs->players[winner_id].invalid_reqs)
 		) {
-			winner = p;
-			winner_letter = i;
+			winner_id = i;
+			strcpy(winner_name, player_name);
 		}
 		reader_leave(m->game_sync);
 
 	}
 
-	printf("\nChompChamp Champion: [%c] %s\n", 'A' + winner_letter, m->player_path[winner_letter]);
+	printf("\nChompChamp Champion: [%s] %s\n", winner_name, m->player_path[winner_id]);
 }
 
 
