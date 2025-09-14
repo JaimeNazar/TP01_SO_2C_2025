@@ -28,9 +28,8 @@
 #define MAX_PLAYERS 9
 #define MIN_PLAYERS 1
 
-// NOTE: Usar malloc para los strings?
 typedef struct {
-	int delay, seed, timeout;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
+	int delay, seed, timeout;	
 	char view_path[MAX_STR_LEN];
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
 	GameState *game_state;
@@ -44,8 +43,6 @@ typedef struct {
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
-
-// TODO: Hacer que retornen algo diferente de 0 en caso de error y manejar errores
 
 /* Funcion auxiliar, copia contenidos de un string a otro. 
  * Realizando verificaciones correspondientes. 
@@ -84,8 +81,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 					break;
 				case 'p':
 					i++;
-							
-					// TODO: Modularizar, son muchas cosas anidadas
+					
 					// Guardar jugadores hasta el proximo argumento
 					while (i < argc && argv[i][0] != '-') {
 						if (*player_count >= MAX_PLAYERS) {
