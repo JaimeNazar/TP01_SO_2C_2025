@@ -18,8 +18,10 @@
 #define GAME_STATE_SHM "/game_state"
 #define GAME_SYNC_SHM "/game_sync"
 
+#define MAX_PLAYER_NAME_SIZE 16
+
 typedef struct { 
-    char name[16];					// Nombre del jugador
+    char name[MAX_PLAYER_NAME_SIZE];					// Nombre del jugador
     unsigned int score;				// Puntaje
     unsigned int invalid_reqs;		// Cantidad de solicitudes de movimientos inválidas realizadas
     unsigned int valid_reqs;		// Cantidad de solicitudes de movimientos válidas realizadas

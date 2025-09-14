@@ -60,7 +60,7 @@ GameState* open_game_state(unsigned int width, unsigned int height) {
 }
 
 GameSync* open_game_sync() {
-	int fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0644); 
+	int fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
     if (fd == -1) {
         perror("COMMON::GET_GAME_SYNC: Error opening shmem\n");
     }

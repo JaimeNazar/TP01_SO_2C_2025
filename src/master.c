@@ -346,6 +346,7 @@ static int init_childs(MasterADT m) {
 
 	// Luego los jugadores
 	pid_t player_pid = -1;
+	char name_buff[MAX_PLAYER_NAME_SIZE];
 	
 	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
@@ -368,8 +369,12 @@ static int init_childs(MasterADT m) {
 			return execve(m->player_path[i], argv, NULL);
 		}
 
+		// Armar nombre
+		sprintf(name_buff, "Player %d", i);
+
 		// Agregar al game state
 		writer_enter(m->game_sync);
+		strcpy(gs->players[i].name, name_buff);
 		
 		gs->players[i].pid = player_pid;
 		writer_leave(m->game_sync);

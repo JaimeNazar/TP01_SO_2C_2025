@@ -122,8 +122,9 @@ void view_render(viewADT v) {
 
 				mvwprintw(v->window, 5 + (int)i, 
 						v->width + 2, 
-						"%-10c | %-10d | %-10d | %-10d", 
-						'A' + (int)i, v->game_state->players[i].score, 
+						"%-10s | %-10d | %-10d | %-10d", 
+						v->game_state->players[i].name, 
+                        v->game_state->players[i].score, 
 						v->game_state->players[i].valid_reqs, 
 						v->game_state->players[i].invalid_reqs);
 
