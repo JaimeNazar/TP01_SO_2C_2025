@@ -120,7 +120,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
                     break;
 
                 case 'w': // width
-					if(atoi(argv[i]) <= 0|| !is_number(argv[i]) ) {
+					if(atoi(argv[i]) <= 9 || !is_number(argv[i]) ) {
 						printf("MASTER::PARSE: Invalid width value\n");
 						return -1;
 					} 
@@ -129,7 +129,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
                 case 'h': // height
 
-					if(atoi(argv[i]) <= 0 || !is_number(argv[i]) ) {
+					if(atoi(argv[i]) <= 9 || !is_number(argv[i]) ) {
 						printf("MASTER::PARSE: Invalid height value\n");
 						return -1;
 					}
