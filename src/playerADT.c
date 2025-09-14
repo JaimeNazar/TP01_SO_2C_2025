@@ -74,15 +74,6 @@ bool still_playing(PlayerADT p) {
 	return !p->game_finished || !p->blocked;
 }
 
-int get_board_value(PlayerADT p, unsigned int x, unsigned int y) {
-	if (x >= p->width || y >= p->height) {
-        perror("PLAYER::GET_BOARD_VALUE: Out of bounds");
-        return -10;
-    }
-
-    return p->board[y*p->width + x];
-}
-
 unsigned int get_x(PlayerADT p) {
     return p->x;
 }
@@ -125,10 +116,12 @@ int send_movement(PlayerADT p, unsigned char move) {
 	return 0;
 }
 
+// posicion dentro del tablero
 bool is_valid_position(PlayerADT p, int x, int y) {
     return x >= 0 && x < p->width && y >= 0 && y < p->height;
 }
 
+//valor de la posicion del tablero
 int get_board_cell(PlayerADT p, int x, int y) {
     if (!is_valid_position(p, x, y)) {
         return -1; // Valor inválido para posiciones fuera del tablero
@@ -136,6 +129,7 @@ int get_board_cell(PlayerADT p, int x, int y) {
     return p->board[y * p->width + x];
 }
 
+// posicion dentro del tablero y libre
 bool is_cell_free(PlayerADT p, int x, int y) {
     int cell_value = get_board_cell(p, x, y);
     return cell_value >= 1 && cell_value <= 9;

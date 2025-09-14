@@ -22,10 +22,6 @@ void get_state_snapshot(PlayerADT p);
 
 bool still_playing(PlayerADT p);
 
-/*
- * Lee el valor en las coordenadas especificadas
- */
-int get_board_value(PlayerADT p, unsigned int x, unsigned int y);
 
 // Funciones getters
 
