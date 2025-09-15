@@ -372,7 +372,7 @@ static int init_childs(MasterADT m) {
 		}
 
 		// Armar nombre
-		sprintf(name_buff, "Player %d", i);
+		sprintf(name_buff, "Player %c", 'A' + i);
 
 		// Agregar al game state
 		writer_enter(m->game_sync);
@@ -608,15 +608,17 @@ static int game_start(MasterADT m) {
         wait_delay(m->delay);
 
         // Actualizar timeout
-        int elapsed = (int)difftime(time(NULL), last_time);
+        int elapsed = time(NULL) - last_time;
         tv.tv_sec = m->timeout - elapsed;
 
         // Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
 		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, &tv);
 
-        if(no_player_can_move(m) || ready == 0) {
+
+        if(no_player_can_move(m) || ready == 0 || elapsed >= m->timeout) {
 			writer_enter(m->game_sync);
-            //poner todos los jugadores como bloqueados
+
+            // Poner todos los jugadores como bloqueados
             for (unsigned int i = 0; i < m->player_count; i++) {
                 m->game_state->players[i].blocked = true;
             }
