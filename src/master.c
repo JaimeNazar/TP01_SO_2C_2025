@@ -708,7 +708,7 @@ void print_final_results(const MasterADT m) {
 		waitpid(pid, &status, 0);
 
 		// Usamos \r\n por si la TTY quedó sin traducción de NL
-		printf("[%s] %s (%u) PID(%u) exited(%u) with a score of %u / %u / %u\r\n",
+		printf("[%s] %s (%u) PID(%d) exited(%d) with a score of %u / %u / %u\r\n",
 			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
 
 		reader_enter(m->game_sync);
