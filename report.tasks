@@ -1,0 +1,9 @@
+pvs-studio.com/en/docs/warnings/	1	err	Help: The documentation for all analyzer warnings is available here: https://pvs-studio.com/en/docs/warnings/.
+/root/src/master.c	721	note	V576 Incorrect format. Consider checking the fifth actual argument of the 'printf' function. The UNSIGNED integer type argument is expected.
+/root/src/master.c	721	note	V576 Incorrect format. Consider checking the sixth actual argument of the 'printf' function. The UNSIGNED integer type argument is expected.
+/root/src/playerADT.c	27	warn	V522 There might be dereferencing of a potential null pointer 'p'. Check lines: 27, 26.
+/root/src/playerADT.c	37	note	V1107 Function declared as accepting unspecified number of parameters is called with '2' arguments. Consider explicitly specifying the function parameters list.
+/root/src/view.c	125	note	V576 Incorrect format. Consider checking the eighth actual argument of the 'mvwprintw' function. The SIGNED integer type argument is expected.
+/root/src/view.c	125	note	V576 Incorrect format. Consider checking the seventh actual argument of the 'mvwprintw' function. The SIGNED integer type argument is expected.
+/root/src/view.c	125	note	V576 Incorrect format. Consider checking the sixth actual argument of the 'mvwprintw' function. The SIGNED integer type argument is expected.
+/root/src/view.c	78	note	V1107 Function declared as accepting unspecified number of parameters is called with '2' arguments. Consider explicitly specifying the function parameters list.
