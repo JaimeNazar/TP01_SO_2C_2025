@@ -36,7 +36,7 @@ typedef MasterCDT* MasterADT;
 /* Funcion auxiliar, copia contenidos de un string a otro. 
  * Realizando verificaciones correspondientes. 
  */
-static int str_copy(char *s1, char *s2) {
+static int str_copy(char *s1, const char *s2) {
 	int len = strlen(s2);
 
 	if (len >= MAX_STR_LEN) {
@@ -49,7 +49,7 @@ static int str_copy(char *s1, char *s2) {
 	return 0;
 }
 
-bool is_number(const char *str) {
+static bool is_number(const char *str) {
     if (str == NULL || *str == '\0')
         return false;
     for (int i = 0; str[i]; i++) {
@@ -60,6 +60,10 @@ bool is_number(const char *str) {
 }
 
 static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, unsigned int* height, unsigned int *player_count) {
+
+	// Si se encuentra un argumento mas adelante se cambia
+	*width = DEFAULT_WIDTH;
+	*height = DEFAULT_HEIGHT;
 
 	int i = 1;	// Saltearse nombre del programa
 	while (i < argc) {
@@ -173,23 +177,17 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 		return -1;
 	}
 
-	if (*width <= 0)
-		*width = DEFAULT_WIDTH;
-
-	if (*height <= 0)
-		*height = DEFAULT_HEIGHT;
-
 	return 0;
 }
 
-void wait_delay(int delay_ms) {
+static void wait_delay(int delay_ms) {
     struct timespec ts;
     ts.tv_sec  = delay_ms / 1000;
     ts.tv_nsec = (delay_ms % 1000) * 1000000L;
     nanosleep(&ts, NULL);  //usamos nanoslepp pues usleep no funciona
 }
 
-MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
+static MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	
 	MasterADT m = calloc(1, sizeof(MasterCDT));
 
@@ -349,7 +347,7 @@ static int init_childs(MasterADT m) {
 	int pipe_fd[2]; // Aca se guardan los dos extremos
 
 	// Luego los jugadores
-	pid_t player_pid = -1;
+	pid_t player_pid;
 	char name_buff[MAX_PLAYER_NAME_SIZE];
 	
 	for (unsigned int i = 0; i < m->player_count; i++) {
@@ -578,7 +576,7 @@ static void pipe_set_blocked(MasterADT m, int id) {
 /**
  * Funcion que pregunta si todos los jugadores pueden moverse o no
  */
-bool no_player_can_move(MasterADT m) {
+static bool no_player_can_move(MasterADT m) {
     const GameState *gs = m->game_state;
     for (size_t i = 0; i < m->player_count; i++) {
 
@@ -664,7 +662,7 @@ static int game_start(MasterADT m) {
 	return 0;
 }
 
-void print_final_results(const MasterADT m) {
+static void print_final_results(const MasterADT m) {
     const GameState *gs = m->game_state;
 
     // limpiar pantalla
@@ -678,13 +676,12 @@ void print_final_results(const MasterADT m) {
     waitpid(m->view_pid, &v_status, 0);
     printf("View exited (%d)\n", v_status);
 
-	int winner_id = -1;
+	int winner_id = 0;
 	char winner_name[MAX_PLAYER_NAME_SIZE] = {0};
 
 	// Data de cada jugador
 	char player_name[MAX_PLAYER_NAME_SIZE] = {0};
 	pid_t pid;
-	unsigned int score, valid_reqs, invalid_reqs;
 
 	for (unsigned i = 0; i < m->player_count; i++) {
 
@@ -693,6 +690,7 @@ void print_final_results(const MasterADT m) {
 
 		const Player *p = &gs->players[i];
 
+		unsigned int score, valid_reqs, invalid_reqs;
 		pid = p->pid;
 		score = p->score;
 		valid_reqs = p->valid_reqs;
@@ -712,8 +710,10 @@ void print_final_results(const MasterADT m) {
 			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
 
 		reader_enter(m->game_sync);
+
+		// Si winner es 0, entonces tomarlo como ganador porque podria ser el unico jugador
 		if (
-			winner_id == -1 || (score > gs->players[winner_id].score) ||
+			winner_id == 0 || (score > gs->players[winner_id].score) ||
 			(score == gs->players[winner_id].score && valid_reqs > gs->players[winner_id].valid_reqs) ||
 			(score == gs->players[winner_id].score && valid_reqs == gs->players[winner_id].valid_reqs && invalid_reqs < gs->players[winner_id].invalid_reqs)
 		) {
