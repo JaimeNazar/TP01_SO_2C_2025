@@ -1,17 +1,5 @@
-#include <stdlib.h>
-#include <ncurses.h>
-#include <sys/mman.h>
-#include <sys/stat.h>       
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdio.h>
-
-#include <unistd.h>
-#include <pty.h>
-#include <sys/ioctl.h>
-#include <stdlib.h>
-
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "common.h"
 
 // Color, experimental
@@ -27,21 +15,22 @@
 typedef struct {
     WINDOW *window;
     int width, height;
-
+    char finished;
+	unsigned int player_count;	// No va a cambiar mucho, conviene tener una copia
     GameState *game_state;
     GameSync *game_sync;
 } viewCDT;
 
 typedef viewCDT* viewADT;
 
-void view_init_ncurses(viewADT v) {
+// Declaración explícita para evitar advertencias del PVS-Studio
+static void view_update(viewADT v);
+
+static void view_init_ncurses(viewADT v) {
     
-    // If the terminal isnt defined, set it
+    // si la terminal no esta definida, hacerlo
     if (!getenv("TERM"))
         setenv("TERM", "xterm-256color", 1);
-
-
-    // TODO: Error check
 
     // Ncurses
     initscr();
@@ -49,14 +38,12 @@ void view_init_ncurses(viewADT v) {
 	noecho();
 	cbreak(); // Line buffering disabled. pass on everything
 
-    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); // TABLE_WIDTH columnas extra para info 
-                                                                                                                        // y FRAME para el marco
-    
-    // v->window = newwin((v->height <= 14)? v->height + AUX_HEIGHT : v->height, v->width + TABLE_WIDTH, 0, 0); // TABLE_WIDTH columnas extra para info
+    // TABLE_WIDTH columnas extra para la info de la tabla y FRAME para el marco
+    v->window = newwin((v->height <= 14 ? (v->height + AUX_HEIGHT) : v->height) + FRAME, v->width + TABLE_WIDTH + FRAME, 0, 0); 
 
     wrefresh(v->window);
 
-    // Check color support
+    // checkear si soporta color
     if (!has_colors() ) {
         endwin();
         printf("Your terminal does not support color\n");
@@ -89,65 +76,39 @@ void view_init_ncurses(viewADT v) {
     init_pair(PLAYER_PAIR_BASE + 20 + 9, COLOR_WHITE, COLOR_BLUE);     // Path Jugador 10
 }
 
-// TODO: Agregar como libreria
-void view_init_shm(viewADT v) {
-    
-    // TODO: Check FLAGS
-    // Shared shmory
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
+static void view_init_shm(viewADT v) {
 
-    v->game_state = mmap(0, sizeof(GameState), PROT_READ, MAP_SHARED, fd, 0); // Memory map shared memory segment
+    v->game_state = open_game_state(v->width, v->height);
+	v->game_sync = open_game_sync();
 
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
-    if (fd == -1) {
-        perror("Error SHM\n");
-    }
-
-    v->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
+	// Obtener el count
+	reader_enter(v->game_sync);
+	v->player_count = v->game_state->player_count;
+	reader_leave(v->game_sync);
 }
 
-void view_cleanup(viewADT v) {
-    clrtoeol();
-	wrefresh(v->window);
-
+static void view_cleanup(viewADT v) {
+    
     if (v->window) {
+        wclrtoeol(v->window);
+        wrefresh(v->window);
+
         delwin(v->window);
         v->window = NULL;
     }
 
-	endwin();   // Deallocate memory and end ncurses
+	endwin();   //desasignar memoria y terminar ncurses
 }
 
-void view_render(viewADT v) {
+static void view_render(viewADT v) {
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
-            int is_player = 0;
-            unsigned int player_idx = 0;
-            for (unsigned int p = 0; p < v->game_state->player_count; p++) {
-                if (v->game_state->players[p].x == j && v->game_state->players[p].y == i) {
-                    is_player = 1;
-                    player_idx = p;
-                    break;
-                }
-            }
+            
+			reader_enter(v->game_sync);
             int value = v->game_state->board[i * v->width + j];
-            int is_trail = 0;
-            unsigned int trail_player = 0;
-            if (!is_player) {
-                if (value < 0){
-                    is_trail = 1;
-                    trail_player = (unsigned int) ((-value)); // Ajuste para que A=0, B=1, etc.
-                } else if (value == 0) {
-                    is_trail = 1;
-                    trail_player = 0;
-                }
-            }
+			reader_leave(v->game_sync);
 
-            //Muestra tablero de datos
+            // Muestra tablero de datos
             
             // Título de la tabla
             const char *title = "Chomp Champs - Tabla de Jugadores";
@@ -161,27 +122,58 @@ void view_render(viewADT v) {
             mvwhline(v->window, 4, v->width + 2, '-', TABLE_WIDTH - 2);
 
             // Datos de los jugadores
-            for (size_t i = 0; i < v->game_state->player_count; i++) {
-            mvwprintw(v->window, 5 + (int)i, v->width + 2, "%-10c | %-10d | %-10d | %-10d", 'A' + (int)i, v->game_state->players[i].score, v->game_state->players[i].valid_reqs, v->game_state->players[i].invalid_reqs);
+            for (size_t k = 0; k < v->player_count; k++) {
+				reader_enter(v->game_sync);
+
+				mvwprintw(v->window, 5 + (int)k, 
+						v->width + 2, 
+						"%-10s | %-10u | %-10u | %-10u", 
+						v->game_state->players[k].name, 
+                        v->game_state->players[k].score, 
+						v->game_state->players[k].valid_reqs, 
+						v->game_state->players[k].invalid_reqs);
+
+				reader_leave(v->game_sync);
             }
+
             wrefresh(v->window);
 
-
-            if (is_player) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
-                mvwaddch(v->window, i + 1, j + 1, 'A' + player_idx);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + player_idx % 6));
-            } else if (is_trail) {
-                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
-                mvwaddch(v->window, i + 1, j + 1, 'A' + trail_player);
-                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + (trail_player % 6)));
+			// Si es un jugador, marcarlo
+            if (value <= 0) {
+                wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + ((-value) % 6)));
+                mvwaddch(v->window, i + 1, j + 1, 'A' + (-value));
+                wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + 20 + ((-value) % 6)));
             } else {
                 mvwaddch(v->window, i + 1, j + 1, '0' + (value % 10));
             }
         }
     }
+
+	// Agregar las cabezas de los jugadores
+	for (unsigned int i = 0; i < v->player_count; i++) {
+
+	    unsigned int x, y;
+		reader_enter(v->game_sync);
+		x = v->game_state->players[i].x;
+		y = v->game_state->players[i].y;
+		reader_leave(v->game_sync);
+
+		// Dibujarlo
+        wattron(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + i % 6));
+        mvwaddch(v->window, y + 1, x + 1, 'A' + i);
+        wattroff(v->window, COLOR_PAIR(PLAYER_PAIR_BASE + i % 6));
+ 	}
+
     wborder(v->window, '|', '|', '-', '-', '+', '+', '+', '+');
     wrefresh(v->window);
+}
+
+static void view_update(viewADT v) {
+    reader_enter(v->game_sync);
+
+    v->finished = v->game_state->finished;
+
+    reader_leave(v->game_sync);
 }
 
 int main(int argc, char **argv) {
@@ -192,20 +184,23 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Init view context
+    // inicializa el contexto de la view
     viewCDT v = { 0 };
 
     v.width = atoi(argv[1]);
     v.height = atoi(argv[2]);
+    v.finished = 0;
 
     view_init_ncurses(&v);
     view_init_shm(&v);
 
     // Main loop
 
-    while(!v.game_state->finished) {
-        // Wait on semaphore
+    while(!v.finished) {
+        // espera el semaforo
         sem_wait(&(v.game_sync->state_change));
+
+        view_update(&v);
 
         view_render(&v);
 

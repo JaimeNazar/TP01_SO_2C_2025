@@ -1,26 +1,37 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
      
 #include "playerADT.h"
+#include <stdlib.h>
 
-int main(int argc, char* argv[]) {
+int main(int argc, char **argv) {
+
+    srand((unsigned int)time(NULL));
 
     PlayerADT p = init_player(argc, argv);
 
-    srand(time(NULL));
+    if (p == NULL)
+        return -1;
+
+    if(init_shm(p) == -1){
+        return -1;
+    }
 
 	while (1) {
-      
-		get_state_snapshot(p);
-		
-        // Elegir y enviar movimiento 
-        unsigned char move = rand() % 7;
 
-		// Verificar si el juego terminó o si estamos bloqueados
+        // Guardar estado actual
+        get_state_snapshot(p);
+
+        // Verificar si el juego terminó o si estamos bloqueados
         if (!still_playing(p)) {
             break;
         }
-
-		send_movement(p, move);
         
+        // Elegir y enviar movimiento (aleatorio)
+        unsigned char move =  rand() % 7;
+
+        send_movement(p, move);
+
     }
  
     return 0;

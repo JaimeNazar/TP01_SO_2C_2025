@@ -1,13 +1,5 @@
-
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <string.h>
-#include <time.h>
-#include <stdio.h>
-#include <unistd.h>
-#include "common.h"
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "playerADT.h"
 
 #define REWARD_WEIGHT 10
@@ -56,20 +48,19 @@ int main(int argc, char **argv) {
     if (p == NULL)
         return -1;
 
-    // TODO: Error handling
-    if(p_init_shm(p) == -1){
+    if(init_shm(p) == -1){
         return -1;
     }
 
     while (1) {
 
-		// Verificar si el juego terminó o si estamos bloqueados
-        if (!still_playing(p)) {
-            break;
-        }
         // Guardar estado actual
         get_state_snapshot(p);
 
+        // Verificar si el juego terminó o si estamos bloqueados
+        if (!still_playing(p)) {
+            break;
+        }
         // Elegir y enviar movimiento
         unsigned char move = choose_move(p);
         send_movement(p, move);

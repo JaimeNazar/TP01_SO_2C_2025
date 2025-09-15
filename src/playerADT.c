@@ -1,5 +1,5 @@
-
-
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "playerADT.h"
 
 struct PlayerCDT {
@@ -9,7 +9,7 @@ struct PlayerCDT {
 	int id;								// Game state values
 	char blocked;
 	char game_finished;
-	int board[];	// Demasiado? Copiar todo el tablero?
+	int board[];
 };
 
 PlayerADT init_player(int argc, char **argv) {
@@ -24,6 +24,10 @@ PlayerADT init_player(int argc, char **argv) {
     unsigned int height = atoi(argv[2]);
 
 	PlayerADT p = malloc(sizeof(struct PlayerCDT) + sizeof(int) * width * height);
+    if (p == NULL) {
+        fprintf(stderr, "Error: no se pudo asignar memoria para PlayerADT\n");
+        return NULL;
+    }
 	p->width = width;
 	p->height = height;
 	p->blocked = 0;
@@ -32,28 +36,14 @@ PlayerADT init_player(int argc, char **argv) {
 	return p;
 }
 
-int p_init_shm(PlayerADT p) {
+int init_shm(PlayerADT p) {
 
-	// Game state
-    int fd = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);   // Open shared memory object
-    if (fd == -1) {
-        perror("PLAYER::INIT_SHM: Error game state\n");
-		return -1;
-    }
-    p->game_state = mmap(0, sizeof(GameState) + sizeof(int) * p->width * p->height, PROT_READ, MAP_SHARED, fd, 0);
-																		   
-	// Game sync
-    fd = shm_open(GAME_SYNC_SHM, O_RDWR, 0666); 
-    if (fd == -1) {
-        perror("PLAYER::INIT_SHM: Error game sync\n");
-		return -1;
-    }
+    p->game_state = open_game_state(p->width, p->height);
+    p->game_sync = open_game_sync();
 
-    p->game_sync = mmap(0, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
+	reader_enter(p->game_sync);
 	// Chequear id de la game state
 	if (p->id == -1) {
-
 		// Obtenerlo
 		pid_t my_pid = getpid();
 		for (unsigned int i = 0; p->id < 0 && i < p->game_state->player_count; i++) {
@@ -61,8 +51,8 @@ int p_init_shm(PlayerADT p) {
 				p->id = i;
 			}
 		}
-
 	}
+	reader_leave(p->game_sync);
 
 	return 0;
 }
@@ -90,15 +80,6 @@ bool still_playing(PlayerADT p) {
 	return !p->game_finished || !p->blocked;
 }
 
-int get_board_value(PlayerADT p, unsigned int x, unsigned int y) {
-	if (x >= p->width || y >= p->height) {
-        perror("PLAYER::GET_BOARD_VALUE: Out of bounds");
-        return -10;
-    }
-
-    return p->board[y*p->width + x];
-}
-
 unsigned int get_x(PlayerADT p) {
     return p->x;
 }
@@ -119,14 +100,13 @@ int get_id(PlayerADT p) {
     return p->id;
 }
 
-// NOTE: Evitar usar estas
-GameState* get_game_state(PlayerADT p) {
-    return p->game_state;
+
+unsigned int get_player_count(PlayerADT p) {
+    if (p == NULL || p->game_state == NULL)
+        return 0;
+    return p->game_state->player_count;
 }
 
-GameSync* get_game_sync(PlayerADT p) {
-    return p->game_sync;
-}
 
 int send_movement(PlayerADT p, unsigned char move) {
 
@@ -142,10 +122,12 @@ int send_movement(PlayerADT p, unsigned char move) {
 	return 0;
 }
 
-bool is_valid_position(PlayerADT p, int x, int y) {
+// posicion dentro del tablero
+static bool is_valid_position(PlayerADT p, int x, int y) {
     return x >= 0 && x < p->width && y >= 0 && y < p->height;
 }
 
+//valor de la posicion del tablero
 int get_board_cell(PlayerADT p, int x, int y) {
     if (!is_valid_position(p, x, y)) {
         return -1; // Valor inválido para posiciones fuera del tablero
@@ -153,6 +135,7 @@ int get_board_cell(PlayerADT p, int x, int y) {
     return p->board[y * p->width + x];
 }
 
+// posicion dentro del tablero y libre
 bool is_cell_free(PlayerADT p, int x, int y) {
     int cell_value = get_board_cell(p, x, y);
     return cell_value >= 1 && cell_value <= 9;
@@ -209,7 +192,6 @@ int calculate_depth(PlayerADT p, int dx, int dy, int max_depth) {
     return depth;
 }
 
-// NOTE: No se podria hacer leyendo los negativos del tablero?
 bool has_nearby_players(PlayerADT p, int x, int y, int my_id) {
     
     reader_enter(p->game_sync);
@@ -263,7 +245,7 @@ bool is_endgame(PlayerADT p) {
         }
     }
 
-    return (free_cells * 100 / total_cells) < 20; // Menos del 15% libre = endgame
+    return (free_cells * 100 / total_cells) < 20; // Si menos del 20% del tablero está libre, es endgame
 }
 
 

@@ -4,7 +4,7 @@ COMPILER_FLAGS = -D_POSIX_C_SOURCE=200112L --std=c99 -pedantic -pedantic-errors 
 OBJECTS := $(wildcard *.o)
 
 OBJS := common.o playerADT.o
-TARGETS := view master dummy_player greedy_player free_player v2 v1 always_up 
+TARGETS := view master dummy_player greedy_player free_player v2 always_up perfect_cell
 
 all: $(TARGETS)
 
@@ -29,14 +29,14 @@ free_player: free_player.c $(OBJS)
 v2: v2.c $(OBJS)
 	$(COMPILER) $(COMPILER_FLAGS) $^ -o ../$@.out
 
-v1: v1.c $(OBJS)
+always_up: always_up.c $(OBJS)
 	$(COMPILER) $(COMPILER_FLAGS) $^ -o ../$@.out
 
-always_up: always_up.c $(OBJS)
+perfect_cell: perfect_cell.c $(OBJS)
 	$(COMPILER) $(COMPILER_FLAGS) $^ -o ../$@.out
 
 clean:
 	@rm -rf $(OBJECTS) $(OBJS)
-	@rm -rf ../view.out ../dummy_player.out ../greedy_player.out ../free_player.out ../v2.out ../v1.out
+	@rm -rf ../view.out ../dummy_player.out ../greedy_player.out ../free_player.out ../v2.out ../v1.out ../always_up.out ../perfect_cell.out ../master.out
 
 .PHONY: all clean

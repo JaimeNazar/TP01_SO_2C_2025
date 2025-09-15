@@ -1,24 +1,15 @@
-#include <stdio.h>
-#include <string.h>
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
+#include <sys/wait.h>
 #include <time.h>
-#include <sys/mman.h> 
-#include <sys/stat.h>  
 #include <sys/select.h>
-#include <fcntl.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <ctype.h>
 
-#include <semaphore.h>  
-
-// TODO: Put in common.h shared dependencies
 
 #include "common.h"
-#include <errno.h>
 
 #define MAX_STR_LEN 20
-
 #define DEFAULT_WIDTH 10
 #define DEFAULT_HEIGHT 10
 #define DEFAULT_DELAY 200
@@ -26,27 +17,26 @@
 #define MAX_PLAYERS 9
 #define MIN_PLAYERS 1
 
-// NOTE: Usar malloc para los strings?
 typedef struct {
-	int delay, seed, timeout;	// TODO: sacar width y height, meterlos en game state(mismo para player_count)
+	int delay, seed, timeout;	
 	char view_path[MAX_STR_LEN];
 	char player_path[MAX_PLAYERS][MAX_STR_LEN];
 	GameState *game_state;
 	GameSync *game_sync;
+	unsigned int player_count;	// Conviene guardar una copia ya que no va a cambiar mucho
 	int game_state_fd, game_sync_fd;
 	int pipes[MAX_PLAYERS];		// fd de la salida de los pipes de cada jugador
 	int pipes_max_fd;
 	fd_set pipes_set;
+    pid_t view_pid;
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
 
-// TODO: Hacer que retornen algo diferente de 0 en caso de error y manejar errores
-
 /* Funcion auxiliar, copia contenidos de un string a otro. 
  * Realizando verificaciones correspondientes. 
  */
-static int str_copy(char *s1, char *s2) {
+static int str_copy(char *s1, const char *s2) {
 	int len = strlen(s2);
 
 	if (len >= MAX_STR_LEN) {
@@ -59,30 +49,37 @@ static int str_copy(char *s1, char *s2) {
 	return 0;
 }
 
+static bool is_number(const char *str) {
+    if (str == NULL || *str == '\0')
+        return false;
+    for (int i = 0; str[i]; i++) {
+        if (str[i] < '0' || str[i] > '9')
+            return false;
+    }
+    return true;
+}
+
 static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, unsigned int* height, unsigned int *player_count) {
 
-	int i = 1;	// Saltearse nombre del programa
+	// Si se encuentra un argumento mas adelante se cambia
+	*width = DEFAULT_WIDTH;
+	*height = DEFAULT_HEIGHT;
 
+	int i = 1;	// Saltearse nombre del programa
 	while (i < argc) {
 
 		// Tipo de argumento
 		if (argv[i][0] == '-') {
-			switch(argv[i][1]) {
-				case 'v':
+			switch(argv[i++][1]) {
+				case 'v': // view
 					// Obtener el file path
-					i++;
-
-					if (str_copy(m->view_path, argv[i])) {
+					if (str_copy(m->view_path, argv[i++])) {
 						printf("MASTER::PARSE: Invalid view path\n");
 						return -1;
 					}
 					
-					i++;
 					break;
-				case 'p':
-					i++;
-							
-					// TODO: Modularizar, son muchas cosas anidadas
+				case 'p': // players
 					// Guardar jugadores hasta el proximo argumento
 					while (i < argc && argv[i][0] != '-') {
 						if (*player_count >= MAX_PLAYERS) {
@@ -94,49 +91,65 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 							printf("MASTER::PARSE: Invalid player path\n");
 							return -1;
 						}
-						
 						(*player_count)++;
 						i++;
 					}
 
 					break;
-                case 'd':
-                    i++;
+                case 'd': // delay
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -d\n");
                         return -1;
                     }
-                    m->delay = atoi(argv[i]);
-                    i++;
+
+					if (atoi(argv[i]) <= 0 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid delay value\n");
+						return -1;
+					}
+
+
+                    m->delay = atoi(argv[i++]);
                     break;
 
-                case 't':
-                    i++;
+                case 't': // timeout
                     if (i >= argc) {
                         printf("MASTER::PARSE: Missing value for -t\n");
                         return -1;
                     }
-                    m->timeout = atoi(argv[i]);
-                    i++;
+
+					if (atoi(argv[i]) <= 0 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid timeout value\n");
+						return -1;
+					}
+
+                    m->timeout = atoi(argv[i++]);
                     break;
 
-                case 'w':
-                    i++;
-                    *width = atoi(argv[i]);
-                    i++;
+                case 'w': // width
+					if(atoi(argv[i]) <= 9 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid width value\n");
+						return -1;
+					} 
+                    *width = atoi(argv[i++]);
                     break;
 
-                case 'h':
-                    i++;
-                    *height = atoi(argv[i]);
-                    i++;
+                case 'h': // height
+
+					if(atoi(argv[i]) <= 9 || !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid height value\n");
+						return -1;
+					}
+                    *height = atoi(argv[i++]);
                     break;
 
-                case 's':
-                    i++;
-                    m->seed = atoi(argv[i]);
-                    i++;
+                case 's': //seed
+					if( !is_number(argv[i]) ) {
+						printf("MASTER::PARSE: Invalid seed value\n");
+						return -1;
+					}
+                    m->seed = atoi(argv[i++]);
                     break;
+					
                 default:
 					printf("MASTER::PARSE: Invalid argument type: %c \n", argv[i][1]);
 					return -1;
@@ -151,31 +164,32 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
 	}
 
+
 	// Si no se registro ningun jugador al llegar aca, notificar al usuario
 	if(*player_count < MIN_PLAYERS) {
 		printf("MASTER::PARSE: At least one player must be specified\n");
 		return -1;
 	}
 
-	if (*width <= 0)
-		*width = DEFAULT_WIDTH;
-
-	if (*height <= 0)
-		*height = DEFAULT_HEIGHT;
+	// Si no se pasó view, no arrancar
+	if (m->view_path[0] == '\0') {
+		printf("MASTER::PARSE: A view must be specified\n");
+		return -1;
+	}
 
 	return 0;
 }
 
-void wait_delay(int delay_ms) {
+static void wait_delay(int delay_ms) {
     struct timespec ts;
     ts.tv_sec  = delay_ms / 1000;
     ts.tv_nsec = (delay_ms % 1000) * 1000000L;
     nanosleep(&ts, NULL);  //usamos nanoslepp pues usleep no funciona
 }
 
-MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
+static MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	
-	MasterADT m = calloc(0, sizeof(MasterCDT));
+	MasterADT m = calloc(1, sizeof(MasterCDT));
 
 	if (m == NULL) {
 		return NULL;
@@ -184,8 +198,10 @@ MasterADT init_master(int seed, unsigned int delay, unsigned int timeout) {
 	m->delay = delay;
 	m->seed = seed;
 	m->timeout = timeout;
+	m->player_count = 0;
 	FD_ZERO(&m->pipes_set);
 	m->pipes_max_fd = -1;
+    m->view_pid = -1;
 
 	return m;
 }
@@ -212,6 +228,7 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	gs->width = width;
 	gs->height = height;
 	gs->player_count = player_count;
+	m->player_count = player_count;	// Tambien guardar copia en el master, para evitar entrar en state todo el tiempo
 
 	// Llenar el tablero
 	srand(m->seed);
@@ -224,13 +241,12 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 		}
 	}
 
-		// Calcula un rectángulo central (60% del tablero, centrado)
+	// Calcula un rectángulo interior para colocar a los jugadores 
 	int rect_w = (int)(gs->width * 0.6);
 	int rect_h = (int)(gs->height * 0.6);
 	int rect_x0 = (gs->width - rect_w) / 2;
 	int rect_y0 = (gs->height - rect_h) / 2;
 
-	// Calcula la cantidad de celdas del borde del rectángulo
 	int border_cells = 2 * (rect_w + rect_h) - 4;
 
 	// Guardar todas las posiciones del borde en un array
@@ -238,28 +254,28 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	int border_y[border_cells];
 	int idx = 0;
 
-	// Borde superior (izq a der)
+	// Borde superior 
 	for (int x = 0; x < rect_w; x++) {
 	    border_x[idx] = rect_x0 + x;
 	    border_y[idx++] = rect_y0;
 	}
-	// Borde derecho (arriba a abajo, sin repetir esquina)
+	// Borde derecho 
 	for (int y = 1; y < rect_h - 1; y++) {
 	    border_x[idx] = rect_x0 + rect_w - 1;
 	    border_y[idx++] = rect_y0 + y;
 	}
-	// Borde inferior (der a izq)
+	// Borde inferior
 	for (int x = rect_w - 1; x >= 0; x--) {
 	    border_x[idx] = rect_x0 + x;
 	    border_y[idx++] = rect_y0 + rect_h - 1;
 	}
-	// Borde izquierdo (abajo a arriba, sin repetir esquina)
+	// Borde izquierdo 
 	for (int y = rect_h - 2; y > 0; y--) {
 	    border_x[idx] = rect_x0;
 	    border_y[idx++] = rect_y0 + y;
 	}
 
-	// Ahora ubicamos a los jugadores equidistantes
+	// Ubicar jugadores equidistantemente
 	for (unsigned int i = 0; i < gs->player_count; i++) {
 	    int pos = (i * border_cells) / gs->player_count;
 	    int px = border_x[pos];
@@ -273,7 +289,6 @@ static int init_state(MasterADT m, unsigned int width, unsigned int height, unsi
 	    gs->players[i].pid = -1;
 	    gs->players[i].blocked = 0;
 
-	    // Marcar la celda como ocupada por el jugador
 	    gs->board[py * gs->width + px] = -1 * (int)i;
 	}
 
@@ -299,7 +314,7 @@ static int init_sync(MasterADT m) {
 	sem_init(&m->game_sync->state_mutex, 1, 1);
 	sem_init(&m->game_sync->reader_count_mutex, 1, 1);	
 
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		sem_init(&m->game_sync->player_can_move[i], 1, 1);
 	}
 
@@ -316,22 +331,26 @@ static int init_childs(MasterADT m) {
 
 	char* argv[] = {m->view_path, arg1, arg2, NULL}; // Debe terminar en un puntero a NULL
 	
+	reader_enter(m->game_sync);
 	sprintf(arg1, "%d", gs->width);
 	sprintf(arg2, "%d", gs->height);
+	reader_leave(m->game_sync);
 
 	// Primero la vista(antes del pipe)
-	int view_pid = fork();
+	pid_t view_pid = fork();
 	if (view_pid == 0) {
 		return execve(m->view_path, argv, NULL); 
 	}
+    m->view_pid = view_pid;
 
 	// Ahora preparar los pipes
 	int pipe_fd[2]; // Aca se guardan los dos extremos
 
 	// Luego los jugadores
-	int player_pid = -1;
+	pid_t player_pid;
+	char name_buff[MAX_PLAYER_NAME_SIZE];
 	
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (pipe(pipe_fd) == -1) {
 			printf("MASTER::INIT_CHILDS: Error creating pipe\n");
 
@@ -352,8 +371,15 @@ static int init_childs(MasterADT m) {
 			return execve(m->player_path[i], argv, NULL);
 		}
 
+		// Armar nombre
+		sprintf(name_buff, "Player %c", 'A' + i);
+
 		// Agregar al game state
-		m->game_state->players[i].pid = player_pid;
+		writer_enter(m->game_sync);
+		strcpy(gs->players[i].name, name_buff);
+		
+		gs->players[i].pid = player_pid;
+		writer_leave(m->game_sync);
 
 		// Si llegue aca estoy en master, configurar pipe
 		close(pipe_fd[1]); // Este no lo necesito
@@ -385,7 +411,7 @@ static int close_shm(MasterADT m) {
 
 static int cleanup(MasterADT m) {
 
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		close(m->pipes[i]);
 	}
 
@@ -395,6 +421,44 @@ static int cleanup(MasterADT m) {
 	free(m);
 
 	return 0;
+}
+
+static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
+static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
+
+/*
+ * Verifica si un jugador esta bloqueado, devuelve verdadero si lo esta
+*/
+static void check_blocked(MasterADT m, int player_id) {
+
+	GameState *gs = m->game_state;
+
+	reader_enter(m->game_sync);
+
+	// Chequear si esta bloqueado
+	const Player *p = &gs->players[player_id];
+
+    const int x = p->x, y = p->y;
+
+    // Revisar las 8 adyacencias
+    for (int d = 0; d < 8; d++) {
+        const int nx = x + DX[d];
+        const int ny = y + DY[d];
+
+        if (nx < 0 || ny < 0 || nx >= gs->width || ny >= gs->height)
+            continue;
+
+        const int cell = gs->board[ny * gs->width + nx];
+        if (cell > 0) {
+            gs->players[player_id].blocked = false;
+			reader_leave(m->game_sync);
+
+			return ;
+        }
+    }
+
+	gs->players[player_id].blocked = true;
+	reader_leave(m->game_sync);
 }
 
 /*
@@ -466,13 +530,13 @@ static bool check_player(MasterADT m, int player_id) {
 	writer_enter(m->game_sync);
 
 	bool is_invalid_move = false;
+
 	// Chequear si la nueva posicion es valida
 	if (x >= gs->width || y >= gs->height
     || gs->board[y*gs->width + x] <= 0) {
 
 		gs->players[player_id].invalid_reqs++;
-        is_invalid_move =true;
-		// TODO: Verificar cuando queda bloqueado
+        is_invalid_move = true;
 	} else {
 		gs->players[player_id].valid_reqs++;
 
@@ -483,9 +547,11 @@ static bool check_player(MasterADT m, int player_id) {
 
 		gs->board[y*gs->width + x] = -1 * player_id;	
 	}
-
+	
 	// Sale escritor	
 	writer_leave(m->game_sync);
+
+	check_blocked(m, player_id);
 
 	// Notificar al jugador que puede enviar otro movimiento
 	sem_post(&m->game_sync->player_can_move[player_id]);	
@@ -500,76 +566,39 @@ static void pipe_set_blocked(MasterADT m, int id) {
 	// Buscar nuevo maximo
 	m->pipes_max_fd = -1;
 	
-	for (unsigned int i = 0; i < m->game_state->player_count; i++) {
+	for (unsigned int i = 0; i < m->player_count; i++) {
 		if (m->pipes[i] > m->pipes_max_fd) {
 			m->pipes_max_fd = m->pipes[i];
 		}
 	}
 }
 
-static const int DX[8] = { 0, 1, 1, 1, 0,-1,-1,-1 };
-static const int DY[8] = {-1,-1, 0, 1, 1, 1, 0,-1 };
+/**
+ * Funcion que pregunta si todos los jugadores pueden moverse o no
+ */
+static bool no_player_can_move(MasterADT m) {
+    const GameState *gs = m->game_state;
+    for (size_t i = 0; i < m->player_count; i++) {
 
-// TODO: WTF, solo chequea si blocked = true
-// Funcion que pregunta si todos los jugadores pueden moverse o no, lo hace chequeando todas las celdas adyacentes a los jugadores
-bool no_player_can_move(MasterADT m) {
-    const GameState *st = m->game_state;
+		reader_enter(m->game_sync);
+		bool is_blocked = gs->players[i].blocked;
+		reader_leave(m->game_sync);
 
-    for (size_t i = 0; i < st->player_count; i++) {
-        const Player *p = &st->players[i];
-
-        // bloqueado => cuenta como "sin movimientos", pasamos al siguiente
-        if (p->blocked) continue;
-
-        const int x = p->x, y = p->y;
-
-        // revisar las 8 adyacencias con salida temprana
-        for (int d = 0; d < 8; d++) {
-            const int nx = x + DX[d];
-            const int ny = y + DY[d];
-
-            if (nx < 0 || ny < 0 || nx >= st->width || ny >= st->height)
-                continue;
-
-            const int cell = st->board[ny * st->width + nx];
-            if (cell > 0) {
-                // hay al menos un movimiento posible → no terminar
-                return false;
-            }
-        }
-        // este jugador no tiene adyacentes libres; seguimos con el próximo
+        if (!is_blocked){
+			return false;
+		}
     }
 
-    // nadie pudo moverse (o todos estaban bloqueados)
+    // Nadie pudo moverse (o todos estaban bloqueados)
     return true;
 }
 
-typedef struct {
-    time_t start;
-    unsigned int duration; // en segundos
-    bool active;
-} Timeout;
-
-void start_timeout(Timeout *t, unsigned int seconds) {
-    t->start = time(NULL);
-    t->duration = seconds;
-    t->active = true;
-}
-
-bool timeout_expired(Timeout *t) {
-    if (!t->active) return false; // no se inició
-    time_t now = time(NULL);
-    return (now - t->start) >= t->duration;
-}
-
-void stop_timeout(Timeout *t) {
-    t->active = false;
-}
-
 static int game_start(MasterADT m) {
-    Timeout t = {0, m->timeout, false};
 
-	while (!m->game_state->finished) {
+    struct timeval tv = {m->timeout, 0};
+    time_t last_time = time(NULL);
+
+	while (1) {
 
 		// Sincronizacion vista
 		sem_post(&m->game_sync->state_change);
@@ -577,60 +606,149 @@ static int game_start(MasterADT m) {
 		sem_wait(&m->game_sync->render_done);
 
         wait_delay(m->delay);
-		// Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
-		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, NULL);
 
-        if(no_player_can_move(m) || timeout_expired(&t)) {
+        // Actualizar timeout
+        int elapsed = time(NULL) - last_time;
+        tv.tv_sec = m->timeout - elapsed;
+
+        // Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
+		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, &tv);
+
+        if(no_player_can_move(m) || ready == 0 || elapsed >= m->timeout) {
+			writer_enter(m->game_sync);
             m->game_state->finished = 1;
-            continue;
+			writer_leave(m->game_sync);
+			
+			// Notificar a la vista, para que no se quede esperando
+			sem_post(&m->game_sync->state_change);
+
+			return 0;
         }
 
-		if (ready == -1) {
+		if (ready < 0) {
+			writer_enter(m->game_sync);
+            m->game_state->finished = 1;
+			writer_leave(m->game_sync);
+
+			sem_post(&m->game_sync->state_change);
+
             perror("MASTER::GAME_START: Error with select");
             return -1;
-        } else if (ready >= 0) {
-			for (unsigned int i = 0; i < m->game_state->player_count; i++) {
 
-				if (m->pipes[i] == -1 || m->game_state->players[i].blocked)	// Ignorar
-					continue;
+        }
 
-				if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
-                    // LUEGO leer el movimiento
-                    if(!check_player(m, i)){//si es valido
-                        start_timeout(&t, m->timeout);
-                    }
-                } else {
-					// Esta bloqueado, actualizar data
-					pipe_set_blocked(m, i);
-				}
+		// Si llegue aca entonces value > 0
+		for (unsigned int i = 0; i < m->player_count; i++) {
 
+			reader_enter(m->game_sync);
+			bool is_blocked = m->game_state->players[i].blocked;
+			reader_leave(m->game_sync);
+
+			if (m->pipes[i] == -1 || is_blocked)	// Ignorar
+				continue;
+
+			if (FD_ISSET(m->pipes[i], &m->pipes_set)) {
+                // LUEGO leer el movimiento
+                if(!check_player(m, i)){//si es valido
+                    last_time = time(NULL); // resetear timeout
+                }
+            } else {
+				// Esta bloqueado, actualizar data
+				pipe_set_blocked(m, i);
 			}
 		}
-
 	}
 
 	return 0;
 }
 
-void print_final_results(const MasterADT m) {
-    const GameState *st = m->game_state;
+static void print_final_results(const MasterADT m) {
+    const GameState *gs = m->game_state;
 
     // limpiar pantalla
     printf("\033[2J\033[H");
 
-    // Líneas simples, sin trucos
-    puts("View exited");  // puts agrega '\n' por sí mismo
+    // Avisar a la vista que se termino
+    sem_post(&m->game_sync->state_change);
+    sem_wait(&m->game_sync->render_done);
 
-    for (unsigned i = 0; i < st->player_count; i++) {
-        const Player *p = &st->players[i];
-        // Usamos \r\n por si la TTY quedó sin traducción de NL
-        printf("Player %s (%u) with a score of %u / %u / %u\r\n",
-               p->name, i, p->score, p->valid_reqs, p->invalid_reqs);
-    }
+    int v_status = 0;
+    waitpid(m->view_pid, &v_status, 0);
+    printf("View exited (%d)\n", v_status);
 
-    fflush(stdout);
+	int winner_id = 0;
+	char winner_name[MAX_PLAYER_NAME_SIZE] = {0};
+
+	// Data de cada jugador
+	char player_name[MAX_PLAYER_NAME_SIZE] = {0};
+	pid_t pid;
+
+	for (unsigned i = 0; i < m->player_count; i++) {
+
+		// Leer los datos necesarios del state
+		reader_enter(m->game_sync);
+
+		const Player *p = &gs->players[i];
+
+		unsigned int score, valid_reqs, invalid_reqs;
+		pid = p->pid;
+		score = p->score;
+		valid_reqs = p->valid_reqs;
+		invalid_reqs = p->invalid_reqs;
+		strcpy(player_name, p->name);
+		
+		reader_leave(m->game_sync);
+
+		sem_post(&m->game_sync->player_can_move[i]); // Por si algun jugador quedo esperando
+		int status = 0;
+
+		// Esperar a que termine el proceso hijo
+		waitpid(pid, &status, 0);
+
+		// Usamos \r\n por si la TTY quedó sin traducción de NL
+		printf("[%s] %s (%u) PID(%d) exited(%d) with a score of %u / %u / %u\r\n",
+			   player_name, m->player_path[i], i, pid, status, score, valid_reqs, invalid_reqs);
+
+		reader_enter(m->game_sync);
+
+		// Si winner es 0, entonces tomarlo como ganador porque podria ser el unico jugador
+		if (
+			winner_id == 0 || (score > gs->players[winner_id].score) ||
+			(score == gs->players[winner_id].score && valid_reqs > gs->players[winner_id].valid_reqs) ||
+			(score == gs->players[winner_id].score && valid_reqs == gs->players[winner_id].valid_reqs && invalid_reqs < gs->players[winner_id].invalid_reqs)
+		) {
+			winner_id = i;
+			strcpy(winner_name, player_name);
+		}
+		reader_leave(m->game_sync);
+
+	}
+
+	printf("\nChompChamp Champion: [%s] %s\n", winner_name, m->player_path[winner_id]);
 }
 
+static void show_game_info(const MasterADT m) {
+	const GameState *st = m->game_state;
+	// limpiar pantalla
+	printf("\033[2J\033[H");
+
+	reader_enter(m->game_sync);
+
+	printf("width: %u\n", st->width);
+	printf("height: %u\n", st->height);
+	printf("delay: %d\n", m->delay);
+	printf("timeout: %d\n", m->timeout);
+	printf("seed: %d\n", m->seed);
+	printf("view: %s\n", m->view_path);
+	printf("num_players: %u\n", st->player_count);
+	for (unsigned i = 0; i < st->player_count; i++) {
+		printf("[Player: %c]  %s\n", '0' + i, m->player_path[i]);
+	}
+
+	reader_leave(m->game_sync);
+
+	sleep(2); // Pausa para que el usuario pueda leer
+}
 
 int main (int argc, char *argv[]) {
 
@@ -650,17 +768,20 @@ int main (int argc, char *argv[]) {
 
 	// Procesar argumentos
 	if (parse_args(m, argc, argv, &width, &height, &player_count)) {
-		printf("Usage: ./ChompChamps [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
+		printf("Usage: ./master.out [-w width] [-h height] [-d delay] [-t timeout] [-s seed] [-v view] [-p player1 player2...]\n");
 
 		cleanup(m);
 		return -1;
 	}
 
-		// Setup inicial
-	if (init_state(m, width, height, player_count) == -1)
+	// Setup inicial
+	if (init_state(m, width, height, player_count) == -1){
 		return -1;
+	}
 
 	init_sync(m);
+
+	show_game_info(m);
 
 	if (init_childs(m) == -1) {
 		printf("MASTER::INIT_CHILDS: Error with the forking and piping\n");
@@ -668,16 +789,14 @@ int main (int argc, char *argv[]) {
 		cleanup(m);
 		return -1;
 	}
-	// TODO: Imprimir informacion del juego como el ejemplo
-	//
 	// Main loop
-	game_start(m);	
+	if (game_start(m) == -1)
+		printf("MASTER::MAIN: Main loop returned with error\n");
 
-    // todo : imprimir resultados
-    //limpiar pantalla y mostrar resultados
-    print_final_results(m);
+	//limpiar pantalla y mostrar resultados
+	print_final_results(m);
 
-// Una vez termino t odo , liberar recursos
-    cleanup(m);
+	// Una vez termino todo, liberar recursos
+	cleanup(m);
 	return 0;
 }
