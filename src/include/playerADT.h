@@ -41,8 +41,6 @@ int send_movement(PlayerADT p, unsigned char move);
 
 //Funciones usadas por los players para calcular sus movimientos:
 
-bool is_valid_position(PlayerADT p, int x, int y);
-
 /*
  * Devuelve el valor de la celda en (x, y), o -1 si es inválida
  */
