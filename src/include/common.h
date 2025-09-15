@@ -56,7 +56,7 @@ void writer_leave(GameSync* sync);
 void reader_enter(GameSync* sync);
 void reader_leave(GameSync* sync);
 
-GameState* open_game_state();
+GameState* open_game_state(unsigned int width, unsigned int height);
 GameSync* open_game_sync();
 
 #endif // COMMON_H

@@ -24,6 +24,10 @@ PlayerADT init_player(int argc, char **argv) {
     unsigned int height = atoi(argv[2]);
 
 	PlayerADT p = malloc(sizeof(struct PlayerCDT) + sizeof(int) * width * height);
+    if (p == NULL) {
+        fprintf(stderr, "Error: no se pudo asignar memoria para PlayerADT\n");
+        return NULL;
+    }
 	p->width = width;
 	p->height = height;
 	p->blocked = 0;
