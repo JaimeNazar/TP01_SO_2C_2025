@@ -616,15 +616,8 @@ static int game_start(MasterADT m) {
         // Seleccionar siguiente jugador, pipes_set queda solo con los fd que no estan bloqueados
 		int ready = select(m->pipes_max_fd + 1, &m->pipes_set, NULL, NULL, &tv);
 
-
         if(no_player_can_move(m) || ready == 0 || elapsed >= m->timeout) {
 			writer_enter(m->game_sync);
-
-            // Poner todos los jugadores como bloqueados
-            for (unsigned int i = 0; i < m->player_count; i++) {
-                m->game_state->players[i].blocked = true;
-            }
-
             m->game_state->finished = 1;
 			writer_leave(m->game_sync);
 			
@@ -665,10 +658,7 @@ static int game_start(MasterADT m) {
 				// Esta bloqueado, actualizar data
 				pipe_set_blocked(m, i);
 			}
-
 		}
-		
-
 	}
 
 	return 0;
@@ -736,7 +726,6 @@ void print_final_results(const MasterADT m) {
 
 	printf("\nChompChamp Champion: [%s] %s\n", winner_name, m->player_path[winner_id]);
 }
-
 
 static void show_game_info(const MasterADT m) {
 	const GameState *st = m->game_state;
