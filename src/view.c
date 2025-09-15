@@ -23,6 +23,9 @@ typedef struct {
 
 typedef viewCDT* viewADT;
 
+// Declaración explícita para evitar advertencias del PVS-Studio
+static void view_update(viewADT v);
+
 void view_init_ncurses(viewADT v) {
     
     // si la terminal no esta definida, hacerlo
@@ -124,7 +127,7 @@ void view_render(viewADT v) {
 
 				mvwprintw(v->window, 5 + (int)i, 
 						v->width + 2, 
-						"%-10s | %-10d | %-10d | %-10d", 
+						"%-10s | %-10u | %-10u | %-10u", 
 						v->game_state->players[i].name, 
                         v->game_state->players[i].score, 
 						v->game_state->players[i].valid_reqs, 
