@@ -123,7 +123,7 @@ int send_movement(PlayerADT p, unsigned char move) {
 }
 
 // posicion dentro del tablero
-bool is_valid_position(PlayerADT p, int x, int y) {
+static bool is_valid_position(PlayerADT p, int x, int y) {
     return x >= 0 && x < p->width && y >= 0 && y < p->height;
 }
 

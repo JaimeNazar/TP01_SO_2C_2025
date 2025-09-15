@@ -27,10 +27,9 @@ unsigned char choose_move(PlayerADT p) {
         int new_y = get_y(p) + dy;
 
 
-        int score = 0;
         if (is_cell_free(p, new_x, new_y)) {
 
-
+            int score;
             int reward = get_board_cell(p, new_x, new_y);
             int free_neighbors = count_free_neighbors(p, new_x, new_y);
             int trap_penalty = is_potential_trap(p, new_x, new_y) ? 1 : 0;

@@ -26,7 +26,7 @@ typedef viewCDT* viewADT;
 // Declaración explícita para evitar advertencias del PVS-Studio
 static void view_update(viewADT v);
 
-void view_init_ncurses(viewADT v) {
+static void view_init_ncurses(viewADT v) {
     
     // si la terminal no esta definida, hacerlo
     if (!getenv("TERM"))
@@ -76,7 +76,7 @@ void view_init_ncurses(viewADT v) {
     init_pair(PLAYER_PAIR_BASE + 20 + 9, COLOR_WHITE, COLOR_BLUE);     // Path Jugador 10
 }
 
-void view_init_shm(viewADT v) {
+static void view_init_shm(viewADT v) {
 
     v->game_state = open_game_state(v->width, v->height);
 	v->game_sync = open_game_sync();
@@ -87,7 +87,7 @@ void view_init_shm(viewADT v) {
 	reader_leave(v->game_sync);
 }
 
-void view_cleanup(viewADT v) {
+static void view_cleanup(viewADT v) {
     
     if (v->window) {
         wclrtoeol(v->window);
@@ -100,7 +100,7 @@ void view_cleanup(viewADT v) {
 	endwin();   //desasignar memoria y terminar ncurses
 }
 
-void view_render(viewADT v) {
+static void view_render(viewADT v) {
     for (int i = 0; i < v->height; i++) {
         for (int j = 0; j < v->width; j++) {
             
@@ -122,16 +122,16 @@ void view_render(viewADT v) {
             mvwhline(v->window, 4, v->width + 2, '-', TABLE_WIDTH - 2);
 
             // Datos de los jugadores
-            for (size_t i = 0; i < v->player_count; i++) {
+            for (size_t k = 0; k < v->player_count; k++) {
 				reader_enter(v->game_sync);
 
-				mvwprintw(v->window, 5 + (int)i, 
+				mvwprintw(v->window, 5 + (int)k, 
 						v->width + 2, 
 						"%-10s | %-10u | %-10u | %-10u", 
-						v->game_state->players[i].name, 
-                        v->game_state->players[i].score, 
-						v->game_state->players[i].valid_reqs, 
-						v->game_state->players[i].invalid_reqs);
+						v->game_state->players[k].name, 
+                        v->game_state->players[k].score, 
+						v->game_state->players[k].valid_reqs, 
+						v->game_state->players[k].invalid_reqs);
 
 				reader_leave(v->game_sync);
             }
@@ -150,8 +150,9 @@ void view_render(viewADT v) {
     }
 
 	// Agregar las cabezas de los jugadores
-	unsigned int x, y;
 	for (unsigned int i = 0; i < v->player_count; i++) {
+
+	    unsigned int x, y;
 		reader_enter(v->game_sync);
 		x = v->game_state->players[i].x;
 		y = v->game_state->players[i].y;
