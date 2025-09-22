@@ -368,6 +368,10 @@ static int init_childs(MasterADT m) {
 			dup2(pipe_fd[1], 1); // Cerrar stdout y duplicar entrada del pipe a stdout
 			close(pipe_fd[1]);	// Ya no necesita este fd 
 
+			for(unsigned int j = 0; j < i; j++ ){
+				close(m->pipes[j]);
+			}
+
 			return execve(m->player_path[i], argv, NULL);
 		}
 
