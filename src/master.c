@@ -29,6 +29,7 @@ typedef struct {
 	int pipes_max_fd;
 	fd_set pipes_set;
     pid_t view_pid;
+	bool has_view;
 } MasterCDT;
 
 typedef MasterCDT* MasterADT;
@@ -77,7 +78,7 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 						printf("MASTER::PARSE: Invalid view path\n");
 						return -1;
 					}
-					
+					m->has_view = true;
 					break;
 				case 'p': // players
 					// Guardar jugadores hasta el proximo argumento
@@ -173,8 +174,8 @@ static int parse_args(MasterADT m, int argc, char *argv[], unsigned int* width, 
 
 	// Si no se pasó view, no arrancar
 	if (m->view_path[0] == '\0') {
-		printf("MASTER::PARSE: A view must be specified\n");
-		return -1;
+		printf("MASTER::PARSE: View not specified\n");
+
 	}
 
 	return 0;
@@ -202,7 +203,7 @@ static MasterADT init_master(int seed, unsigned int delay, unsigned int timeout)
 	FD_ZERO(&m->pipes_set);
 	m->pipes_max_fd = -1;
     m->view_pid = -1;
-
+	m->has_view = false;
 	return m;
 }
 
@@ -308,7 +309,7 @@ static int init_sync(MasterADT m) {
 	}
 
 	// Crear semaforos
-	sem_init(&m->game_sync->state_change, 1, 0); 
+	sem_init(&m->game_sync->state_change, 1, 0);
 	sem_init(&m->game_sync->render_done, 1, 0);
 	sem_init(&m->game_sync->master_mutex, 1, 1);
 	sem_init(&m->game_sync->state_mutex, 1, 1);
@@ -337,12 +338,16 @@ static int init_childs(MasterADT m) {
 	reader_leave(m->game_sync);
 
 	// Primero la vista(antes del pipe)
-	pid_t view_pid = fork();
-	if (view_pid == 0) {
-		return execve(m->view_path, argv, NULL); 
+	if (m->has_view) {
+		pid_t view_pid = fork();
+		if (view_pid == 0) {
+			execve(m->view_path, argv, NULL);
+			//si estoy aca no se pudo ejecutar
+			exit(127);
+		}
+		if(waitpid(view_pid, NULL, WNOHANG) != 0) return -1;
+		m->view_pid = view_pid;
 	}
-    m->view_pid = view_pid;
-
 	// Ahora preparar los pipes
 	int pipe_fd[2]; // Aca se guardan los dos extremos
 
@@ -360,7 +365,6 @@ static int init_childs(MasterADT m) {
 		argv[0] = m->player_path[i]; // El primer argumento es el nombre del programa
 
 		player_pid = fork();
-		
 		if (player_pid == 0) {
 			
 			// Configurar los fd del jugador
@@ -372,8 +376,13 @@ static int init_childs(MasterADT m) {
 				close(m->pipes[j]);
 			}
 
-			return execve(m->player_path[i], argv, NULL);
+			execve(m->player_path[i], argv, NULL);
+
+			exit(127);
+
+
 		}
+		if(waitpid(player_pid, NULL, WNOHANG) != 0) return -1;
 
 		// Armar nombre
 		sprintf(name_buff, "Player %c", 'A' + i);
@@ -605,10 +614,11 @@ static int game_start(MasterADT m) {
 	while (1) {
 
 		// Sincronizacion vista
-		sem_post(&m->game_sync->state_change);
 
-		sem_wait(&m->game_sync->render_done);
-
+		if(m->has_view){
+			sem_post(&m->game_sync->state_change);
+			sem_wait(&m->game_sync->render_done);
+		}
         wait_delay(m->delay);
 
         // Actualizar timeout
@@ -624,7 +634,7 @@ static int game_start(MasterADT m) {
 			writer_leave(m->game_sync);
 			
 			// Notificar a la vista, para que no se quede esperando
-			sem_post(&m->game_sync->state_change);
+			if(m->has_view) sem_post(&m->game_sync->state_change);
 
 			return 0;
         }
@@ -633,8 +643,7 @@ static int game_start(MasterADT m) {
 			writer_enter(m->game_sync);
             m->game_state->finished = 1;
 			writer_leave(m->game_sync);
-
-			sem_post(&m->game_sync->state_change);
+			if (m->has_view) sem_post(&m->game_sync->state_change);
 
             perror("MASTER::GAME_START: Error with select");
             return -1;
@@ -671,15 +680,16 @@ static void print_final_results(const MasterADT m) {
 
     // limpiar pantalla
     printf("\033[2J\033[H");
-
+	if(m->has_view) {
     // Avisar a la vista que se termino
     sem_post(&m->game_sync->state_change);
     sem_wait(&m->game_sync->render_done);
 
-    int v_status = 0;
-    waitpid(m->view_pid, &v_status, 0);
-    printf("View exited (%d)\n", v_status);
 
+		int v_status = 0;
+		waitpid(m->view_pid, &v_status, 0);
+		printf("View exited (%d)\n", v_status);
+	}
 	int winner_id = 0;
 	char winner_name[MAX_PLAYER_NAME_SIZE] = {0};
 
@@ -793,6 +803,11 @@ int main (int argc, char *argv[]) {
 		cleanup(m);
 		return -1;
 	}
+
+	//avisa que se esta jugando si no hay vista
+	if(!m->has_view) printf("\nPlaying...\n");
+
+
 	// Main loop
 	if (game_start(m) == -1)
 		printf("MASTER::MAIN: Main loop returned with error\n");

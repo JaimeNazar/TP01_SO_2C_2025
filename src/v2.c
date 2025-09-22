@@ -51,10 +51,12 @@ int main(int argc, char **argv) {
 
     PlayerADT p = init_player(argc, argv);
 
-    if (p == NULL)
+    if (p == NULL) {
+        free(p);
         return -1;
-
+    }
     if(init_shm(p) == -1){
+        free(p);
         return -1;
     }
 
@@ -73,7 +75,7 @@ int main(int argc, char **argv) {
         send_movement(p, move);
 
     }
-
+    free(p);
     return 0;
 }
 
